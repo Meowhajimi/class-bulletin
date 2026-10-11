@@ -22,7 +22,7 @@
 | **`发布到Cloudflare.bat`** | ★ 更新**主站**（Cloudflare Pages）—— 会跑一次打包并打开控制台 |
 | **`备份公告到Word.bat`** | 把云端全部公告导出成 Word，存到 `backups\` |
 | **`云端自检.bat`** | 检查线上是否正常：能读公告 / 注册已关 / 同学不能发布 |
-| **`跑测试.bat`** | 改完代码跑一遍全部测试（11 个套件，**576 项**） |
+| **`跑测试.bat`** | 改完代码跑一遍全部测试（12 个套件，**606 项**） |
 | **`公开前体检.bat`** | 想把源码公开给同学之前跑一遍：查机密 key / 本机专用文件 / 个人信息 / 乱码 |
 | **`推送到GitHub.bat`** | 改完网页后一键更新主站（打包 → 提交 → 推送，Cloudflare 自动部署） |
 
@@ -494,7 +494,7 @@ import { createMyApiSource } from './myapi.js';
 ## 七、测试与自检
 
 ```bat
-:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（185 项）
+:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（188 项）
 "C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"
 
 :: 后端接口端到端 + 老库迁移 + 栏目增删改（99 项）
@@ -518,7 +518,7 @@ python tools/tests/theme_test.py
 "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
 ```
 
-> 合计 **576 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
+> 合计 **606 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
 
 node 不在 PATH 时用完整路径：
 `"C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"`
@@ -537,6 +537,7 @@ node 不在 PATH 时用完整路径：
 | `tools/tests/package_scan_test.py` | 上传前的机密 key 检测（既不误报注释，也不漏报真 key） |
 | `tools/tests/backup_docx_test.py` | Word 备份的内容与状态判断、**栏目名**、**正文标识与缩进**、两套实现排版是否一致；并调 node 交叉验证浏览器端产物 |
 | `tools/tests/wiring_test.py` | **接线检查**：import 的文件/名字是否存在、**每个 `qs('#id')` 在对应 HTML 里有没有这个元素**（漏了会白屏，而别的测试都不会红）、栏目功能的关键元素是否齐全 |
+| `tools/tests/bat_safety_test.py` | **`.bat` 解析安全**：CRLF / 无 BOM、以及**括号块里不能写中文** —— cmd 在 UTF-8 代码页下会把这种行从中间劈开当命令执行（`'开发分支冲突' is not recognized...`），文件本身却完全正常，肉眼查不出来 |
 | `tools/tests/theme_test.py` | **主题体检**：`var(--x)` 有没有悬空、深色模式有没有漏项、文字对比度是否达到 WCAG 4.5:1、字号阶梯是否递增 |
 | `tools/tests/security_test.py` | **安全防护**（62 项）：锁定递增数学（10→30 分、20→60 分、30→90 分、31→永久）、攻击特征识别、**正常请求零误报**、黑名单持久化与损坏容错 |
 | `tools/tests/mirror_tool_test.py` | 备用镜像发布工具（33 项）：**抓真实 HTTP 头**验证密钥该放 `apikey` 头，以及密钥形状校验、桶预检 |

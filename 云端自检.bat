@@ -14,17 +14,10 @@ where node >nul 2>nul && set "NODE_EXE=node"
 if not defined NODE_EXE if exist "%ProgramFiles%\nodejs\node.exe" set "NODE_EXE=%ProgramFiles%\nodejs\node.exe"
 if not defined NODE_EXE if exist "%LocalAppData%\Programs\nodejs\node.exe" set "NODE_EXE=%LocalAppData%\Programs\nodejs\node.exe"
 
-if not defined NODE_EXE (
-  echo [错误] 找不到 node。
-  echo.
-  echo   这台电脑应该装了 Node，只是没加进 PATH。
-  echo   可以手动运行下面这条（注意两边的引号）：
-  echo.
-  echo   "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
-  echo.
-  pause
-  exit /b 1
-)
+rem ★ 括号块里不写中文：cmd 在 chcp 65001 下解析"中文 + 括号块"会错位，
+rem   把一行从中间劈开当命令执行。所以一律用 goto 跳到块外。
+rem   （见 tools/tests/bat_safety_test.py）
+if not defined NODE_EXE goto :no_node
 
 echo   使用的 node：%NODE_EXE%
 echo.
@@ -42,3 +35,15 @@ echo     3. 未登录发布被拒绝
 echo ============================================
 echo.
 pause
+exit /b 0
+
+:no_node
+echo [错误] 找不到 node。
+echo.
+echo   这台电脑应该装了 Node，只是没加进 PATH。
+echo   可以手动运行下面这条（注意两边的引号）：
+echo.
+echo   "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
+echo.
+pause
+exit /b 1
