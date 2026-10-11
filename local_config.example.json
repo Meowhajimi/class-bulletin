@@ -1,0 +1,10 @@
+{
+  "admin_email": "admin@class.local",
+  "admin_password": "请把这个口令改成你自己的",
+  "db_path": "server/class_bulletin.db",
+  "_说明": [
+    "把本文件复制成 local_config.json 再修改；serve.py 会自动生成一份并打印随机口令。",
+    "local_config.json 含口令，已被 .gitignore 忽略，不要上传到公开仓库。",
+    "只在本机使用时可以忽略本文件，直接 python serve.py 即可。"
+  ]
+}

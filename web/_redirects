@@ -1,0 +1,15 @@
+# Netlify 备用站专用：把 /api/* 代理到 Supabase
+#
+# 为什么需要：主站（Cloudflare Pages）用 functions/api/[[path]].js 做同样的转发；
+# Netlify 没有那个 Function，但它支持用 200 状态码做**外部代理**。
+#
+# 为什么必须转发：在中国移动上，`*.supabase.co` 会被 ERR_CONNECTION_RESET，
+# 而站点自己的域名不会。让浏览器只访问同源地址就绕开了。
+#
+# 说明：
+#   · 这条规则在 Cloudflare Pages 上不起作用也不会报错 ——
+#     Pages 明确不支持代理外部域名，而且 Functions 的优先级高于 _redirects，
+#     所以 /api/* 在那边由 Function 处理。
+#   · 如果哪天不用 Netlify 了，可以删掉这个文件。
+
+/api/*  https://xzafymhzqlkolblugzgp.supabase.co/:splat  200

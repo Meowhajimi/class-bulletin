@@ -1,0 +1,12 @@
+{
+  "name": "class-bulletin",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "班级公告栏：静态前端 + 可替换数据源（Supabase / 本地 Python 服务器）。纯零依赖，无需 npm install。",
+  "scripts": {
+    "test": "node --test \"tools/tests/*.test.js\"",
+    "test:api": "python tools/tests/api_smoke.py",
+    "serve": "python serve.py"
+  }
+}

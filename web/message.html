@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>公告详情</title>
+  <meta name="description" content="班级公告详情。" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body>
+  <div class="page page--reading">
+    <header class="site-header">
+      <div class="site-header__top">
+        <div>
+          <h1 class="site-title" id="site-title">公告详情</h1>
+          <p class="site-subtitle" id="site-subtitle" hidden></p>
+        </div>
+      </div>
+      <p class="site-header__status" id="status-line"></p>
+    </header>
+
+    <main class="main" id="main">
+      <noscript>
+        <div class="noscript-box">这个页面需要开启 JavaScript 才能显示公告内容。</div>
+      </noscript>
+    </main>
+
+    <footer class="site-footer">
+      <a href="index.html">← 返回公告列表</a>
+      <a href="admin.html">学习委员入口</a>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="js/message.js"></script>
+</body>
+</html>

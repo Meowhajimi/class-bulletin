@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>公告管理 · 班级公告栏</title>
+  <meta name="robots" content="noindex" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+</head>
+<body>
+  <div class="page page--wide">
+    <header class="site-header">
+      <div class="site-header__top">
+        <div>
+          <h1 class="site-title" id="site-title">公告管理</h1>
+          <p class="site-subtitle" id="site-subtitle" hidden></p>
+        </div>
+        <div class="toolbar">
+          <a class="btn btn--ghost" href="index.html">查看首页</a>
+          <button class="btn btn--ghost" id="logout" type="button" hidden>退出登录</button>
+        </div>
+      </div>
+      <p class="site-header__status" id="status-line"></p>
+    </header>
+
+    <main class="main" id="main"></main>
+
+    <footer class="site-footer">
+      <span>同学是只读的；发布权限由数据库策略强制控制</span>
+      <a href="index.html">返回首页</a>
+    </footer>
+  </div>
+
+  <div class="toast-stack" id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="js/admin.js"></script>
+</body>
+</html>

@@ -1,0 +1,33 @@
+# 本地服务器配置（含管理员口令，绝不提交）
+local_config.json
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 运行时生成
+server/class_bulletin.db
+
+# IP 黑名单（本机安全防护的运行时数据；属于你的部署环境，不进版本库）
+server/ip_blacklist.json
+
+# service_role key（管理员万能钥匙：只存本机，绝不进版本库、绝不进部署包）
+supabase_service_key.txt
+
+# 上传前打包产物
+#
+# ★ dist/ **不忽略**：Cloudflare Pages 用 Git 集成部署时，
+#   它就是"构建输出目录"。没有它 Pages 就没东西可发布。
+#   所以每次推送前要先跑一次 打包上传.bat / 推送到GitHub.bat 把 dist/ 刷新。
+#   （它是生成物，但必须进版本库 —— 这样就不用依赖平台去装 Python 跑我们的脚本。）
+class-bulletin.zip
+
+# 公告的 Word / JSON 备份（属于你的数据，不进版本库）
+backups/
+
+# 编辑器 / 系统
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db

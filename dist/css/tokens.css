@@ -1,0 +1,111 @@
+/* ★ 主题就在这里改。
+ *
+ * 想换配色、改字号、改圆角大小、调间距，只改这个文件的变量即可，
+ * 其它 CSS 与 JS 都不用动。深色模式跟随系统自动切换。
+ *
+ * 约定：
+ *   1. 变量名一旦发布就不要再改（改了会让别处的 var(--x) 悬空、样式静默失效）。
+ *      要调风格就改数值，或新增变量。
+ *   2. 新增颜色变量时，**深色模式里必须给一份**，否则深色下会出现浅色块。
+ *   3. `tools/tests/theme_test.py` 会自动检查上面两条，并计算文字对比度。
+ */
+
+:root {
+  color-scheme: light dark;
+
+  /* —— 颜色（浅色）—— */
+  --color-bg: #f3f4f7; /* 页面底色 */
+  --color-bg-top: #e8edf7; /* 页头那道很淡的渐变（新增） */
+  --color-surface: #ffffff; /* 卡片、输入框 */
+  --color-surface-alt: #f7f8fa; /* 次级底色 */
+  --color-text: #16181d; /* 标题：加深一点更实 */
+  --color-text-soft: #3f4652; /* 正文：比标题略浅，读起来不刺眼（新增） */
+  --color-muted: #5b6472; /* 次要信息 */
+  --color-muted-soft: #666f7d; /* 更淡的辅助信息（新增）；再淡就低于 WCAG 4.5:1 了 */
+  --color-border: #e5e8ee;
+  --color-border-strong: #d3d8e2; /* hover / 需要更清楚的分隔（新增） */
+  --color-divider: #eef0f4; /* 很淡的细线（新增） */
+  --color-accent: #2563eb;
+  --color-accent-soft: #eaf0fd;
+  /* 主要按钮上的文字颜色 */
+  --color-on-accent: #ffffff;
+  --color-warn: #9a5b00;
+  --color-warn-soft: #fdf1d8;
+  --color-danger: #b3261e;
+  --color-danger-soft: #fdecea;
+  --color-success: #0a6c4a;
+  --color-success-soft: #e3f6ee;
+
+  /* —— 间距 —— */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+
+  /* —— 圆角 —— */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+  --radius-pill: 999px;
+
+  /* —— 字体 —— */
+  --font-sans: system-ui, -apple-system, 'Segoe UI', 'PingFang SC', 'Hiragino Sans GB',
+    'Microsoft YaHei', 'Source Han Sans SC', 'Noto Sans CJK SC', sans-serif;
+  --font-mono: ui-monospace, SFMono-Regular, Consolas, 'Courier New', monospace;
+
+  /* 正文 16px 起步：中文在手机上更耐读 */
+  --text-xs: 12px;
+  --text-sm: 13px;
+  --text-base: 16px;
+  --text-lg: 18px;
+  --text-xl: 22px;
+  --text-2xl: 28px;
+
+  --leading-tight: 1.35;
+  --leading-normal: 1.6;
+  --leading-loose: 1.75;
+
+  /* —— 其它 —— */
+  --shadow-card: 0 1px 2px rgba(16, 24, 40, 0.04), 0 1px 3px rgba(16, 24, 40, 0.06);
+  --shadow-card-hover: 0 4px 12px rgba(16, 24, 40, 0.08), 0 2px 4px rgba(16, 24, 40, 0.04);
+  --shadow-pop: 0 12px 32px rgba(16, 24, 40, 0.16);
+  --content-width: 760px;
+  --reading-width: 680px; /* 详情页正文宽度：一行别太长，眼睛才不累（新增） */
+  --control-height: 44px; /* 手指点起来够大 */
+  --focus-ring: 0 0 0 3px rgba(37, 99, 235, 0.35);
+  --transition-fast: 120ms ease; /* 新增 */
+  --transition-base: 180ms ease; /* 新增 */
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0e1014;
+    --color-bg-top: #0a0c10;
+    --color-surface: #161920;
+    --color-surface-alt: #1b1f27;
+    --color-text: #eef1f6;
+    --color-text-soft: #c9d0db;
+    --color-muted: #98a1af;
+    --color-muted-soft: #8b93a1;
+    --color-border: #262b34;
+    --color-border-strong: #343b47;
+    --color-divider: #21252d;
+    --color-accent: #7aa7ff;
+    --color-accent-soft: #1b2739;
+    --color-on-accent: #0b1220;
+    --color-warn: #f0b866;
+    --color-warn-soft: #33280f;
+    --color-danger: #ff8f86;
+    --color-danger-soft: #3a1f1c;
+    --color-success: #63d6a6;
+    --color-success-soft: #123125;
+
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4);
+    --shadow-card-hover: 0 4px 14px rgba(0, 0, 0, 0.5);
+    --shadow-pop: 0 12px 34px rgba(0, 0, 0, 0.55);
+    --focus-ring: 0 0 0 3px rgba(122, 167, 255, 0.4);
+  }
+}

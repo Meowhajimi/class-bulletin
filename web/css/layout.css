@@ -1,0 +1,238 @@
+/* 页面骨架与响应式。改整体布局在这里。 */
+
+.page {
+  max-width: var(--content-width);
+  margin: 0 auto;
+  /* 给 iOS 刘海屏留出安全距离 */
+  padding: var(--space-5) var(--space-4) max(var(--space-6), env(safe-area-inset-bottom));
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-height: 100vh;
+}
+
+/* —— 顶部 —— */
+
+.site-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  /* 页头是整页的视觉起点：给一道极淡的渐变，往内容方向收淡 */
+  margin: calc(var(--space-5) * -1) calc(var(--space-4) * -1) 0;
+  padding: var(--space-5) var(--space-4) var(--space-4);
+  background: linear-gradient(180deg, var(--color-bg-top) 0%, var(--color-bg) 100%);
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.site-header__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--space-4);
+}
+
+.site-title {
+  position: relative;
+  font-size: var(--text-2xl);
+  line-height: var(--leading-tight);
+  letter-spacing: -0.01em;
+  padding-left: var(--space-3);
+}
+
+/* 标题左侧一道竖向色条：不加 HTML，纯 CSS 就有"页头"的感觉 */
+.site-title::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 0.12em;
+  bottom: 0.12em;
+  width: 4px;
+  border-radius: var(--radius-pill);
+  background: var(--color-accent);
+}
+
+.site-subtitle {
+  margin-top: var(--space-2);
+  padding-left: var(--space-3);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+}
+
+.site-header__status {
+  margin-top: var(--space-1);
+  padding-left: var(--space-3);
+  color: var(--color-muted-soft);
+  font-size: var(--text-xs);
+}
+
+/* 搜索与筛选栏占满 header 宽度 */
+.site-header__filters {
+  margin-top: var(--space-2);
+}
+
+/* —— 主体 —— */
+
+.main {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  flex: 1;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+/* 区块小标题：小、粗、带字距，起"分组标签"的作用 */
+.section__title {
+  font-size: var(--text-xs);
+  font-weight: 700;
+  color: var(--color-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+/* 往期公告折叠区：用原生 details，无 JS 也能用 */
+.past {
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-md);
+  background: var(--color-surface);
+  overflow: hidden;
+}
+
+.past__summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4);
+  min-height: var(--control-height);
+  cursor: pointer;
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--color-muted);
+  user-select: none;
+  transition: background var(--transition-fast);
+}
+
+.past__summary:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.past[open] .past__summary {
+  border-bottom: 1px solid var(--color-divider);
+}
+
+.past__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-4);
+  background: var(--color-surface-alt);
+}
+
+/* —— 页脚 ——
+ * 内容全部靠左：右下角有可能浮着「紧急公告」标记，
+ * 靠右的内容在手机上会被它盖住（同学就点不到学习委员入口了）。
+ */
+
+.site-footer {
+  border-top: 1px solid var(--color-divider);
+  padding-top: var(--space-4);
+  color: var(--color-muted-soft);
+  font-size: var(--text-xs);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--space-2);
+}
+
+/* 页脚里的一行（上行：两个入口；下行：状态与在线人数） */
+.site-footer__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-2) var(--space-4);
+  /* 不让这一行伸到屏幕最右边，避免被浮动标记压住 */
+  max-width: 100%;
+}
+
+/* 在线人数：比普通页脚文字更淡，刻意做得不显眼 */
+.footer-online {
+  color: var(--color-muted-soft);
+  font-variant-numeric: tabular-nums;
+}
+
+/* —— 详情页 —— */
+
+/* 一行太长眼睛会累，详情页单独用更窄的阅读宽度 */
+.page--reading .main {
+  max-width: var(--reading-width);
+  width: 100%;
+  margin: 0 auto;
+}
+
+/* 详情页的正文更松，适合长通知 */
+.page--reading .card__body {
+  font-size: var(--text-lg);
+  line-height: var(--leading-loose);
+}
+
+/* —— 管理页 —— */
+
+.admin-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+}
+
+@media (min-width: 900px) {
+  .admin-grid {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .page--wide {
+    max-width: 1060px;
+  }
+  .admin-panel {
+    position: sticky;
+    top: var(--space-5);
+  }
+}
+
+@media (max-width: 480px) {
+  .page {
+    /* 手机左右各 12px，比电脑上紧一点，内容更宽 */
+    padding: var(--space-4) var(--space-3) var(--space-6);
+    gap: var(--space-4);
+  }
+  /* 负边距必须跟着 .page 的 padding 一起变，否则页头会错位 */
+  .site-header {
+    margin: calc(var(--space-4) * -1) calc(var(--space-3) * -1) 0;
+    padding: var(--space-4) var(--space-3) var(--space-3);
+  }
+  .site-title {
+    font-size: var(--text-xl);
+  }
+  .site-title::before {
+    width: 3px;
+  }
+  .site-header__top {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .main {
+    gap: var(--space-5);
+  }
+  .section {
+    gap: var(--space-3);
+  }
+}

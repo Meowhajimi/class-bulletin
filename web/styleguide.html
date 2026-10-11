@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>样式预览 · 班级公告栏</title>
+  <meta name="robots" content="noindex" />
+  <meta name="theme-color" content="#2563eb" />
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/tokens.css" />
+  <link rel="stylesheet" href="css/base.css" />
+  <link rel="stylesheet" href="css/layout.css" />
+  <link rel="stylesheet" href="css/components.css" />
+  <style>
+    /* 只属于这个预览页的少量样式 */
+    .sg-note {
+      font-size: var(--text-xs);
+      color: var(--color-muted);
+      margin-top: var(--space-4);
+    }
+    .sg-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: var(--space-2);
+      align-items: center;
+    }
+    .sg-swatches {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+      gap: var(--space-2);
+    }
+    .sg-swatch {
+      border: 1px solid var(--color-border);
+      border-radius: var(--radius-md);
+      overflow: hidden;
+      font-size: var(--text-xs);
+    }
+    .sg-swatch__chip {
+      height: 40px;
+    }
+    .sg-swatch__name {
+      padding: var(--space-1) var(--space-2);
+      color: var(--color-muted);
+      background: var(--color-surface);
+    }
+  </style>
+</head>
+<body>
+  <div class="page">
+    <header class="site-header">
+      <div class="site-header__top">
+        <div>
+          <h1 class="site-title">样式预览</h1>
+          <p class="site-subtitle">一页看完所有状态 · 不是给同学看的页面</p>
+        </div>
+      </div>
+      <p class="site-header__status">
+        系统深色模式跟随：把系统的「浅色/深色」切换一下，本页会自动变色
+      </p>
+      <div class="site-header__filters" id="demo-filter"></div>
+    </header>
+
+    <main class="main">
+      <section class="section">
+        <h2 class="section__title">当前公告 · 卡片各种形态</h2>
+        <div class="list" id="cards"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">徽章</h2>
+        <div class="sg-row" id="badges"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">按钮</h2>
+        <div class="sg-row" id="buttons"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">表单</h2>
+        <div class="form" style="max-width: 420px">
+          <div class="field">
+            <span class="field__label">标题</span>
+            <input class="input" type="text" placeholder="例如：本周五交实验报告" />
+            <span class="field__hint">这是一句提示文字，说明这里该填什么。</span>
+          </div>
+          <div class="field">
+            <span class="field__label">正文</span>
+            <textarea class="textarea" placeholder="把通知内容写在这里"></textarea>
+          </div>
+          <label class="check-row" for="sg-urgent">
+            <input type="checkbox" id="sg-urgent" checked />
+            <span>设为紧急公告（主界面右下角标红，并排在最前面）</span>
+          </label>
+        </div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">状态占位</h2>
+        <div class="list" id="states"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">加载骨架</h2>
+        <div id="skeleton"></div>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">浮层提示</h2>
+        <div class="sg-row" id="toasts"></div>
+        <p class="sg-note">正常的提示会出现在窗口底部正中（这里是静态排出来看样子的）。</p>
+      </section>
+
+      <section class="section">
+        <h2 class="section__title">主题色板</h2>
+        <div class="sg-swatches" id="swatches"></div>
+        <p class="sg-note">
+          改配色只需改 <code>web/css/tokens.css</code>；
+          <code>python tools/tests/theme_test.py</code> 会自动检查变量是否悬空、深色模式是否漏项、
+          文字对比度是否达到 WCAG 4.5:1。
+        </p>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <span>样式预览页 · 不会被同学用到</span>
+      <span class="site-footer__links">
+        <a href="index.html">回到公告首页</a>
+        <a href="admin.html">学习委员入口</a>
+      </span>
+    </footer>
+  </div>
+
+  <a class="urgent-flag" href="index.html">
+    <span>紧急公告</span>
+  </a>
+
+  <script type="module">
+    import { el, qs } from './js/ui/dom.js';
+    import { renderMessageCard } from './js/ui/message-card.js';
+    import { renderFilterBar } from './js/ui/filter-bar.js';
+    import { icon } from './js/ui/icon.js';
+    import * as states from './js/ui/states.js';
+
+    const now = Date.now();
+    const iso = (days) => new Date(now + days * 86400000).toISOString();
+
+    const demo = {
+      id: 'demo-1',
+      title: '本周五交实验报告（普通公告）',
+      body: '提交到学习通平台。\n注意格式要求：正文用宋体小四，行距 1.5 倍。',
+      published_at: iso(-1),
+      expires_at: null,
+      is_urgent: false,
+    };
+
+    /* —— 卡片 —— */
+    qs('#cards').append(
+      renderMessageCard({ ...demo, id: 'a', is_urgent: true, title: '紧急：今天下午停课' }, { now }),
+      renderMessageCard(demo, { now, detailHref: 'message.html?id=demo-1' }),
+      renderMessageCard(
+        {
+          ...demo,
+          id: 'b',
+          title: '这是一条很长的公告，用来演示摘要截断',
+          body: '很长的正文。'.repeat(40),
+        },
+        { now, summaryLength: 40, detailHref: 'message.html?id=demo-1' },
+      ),
+      renderMessageCard(
+        { ...demo, id: 'c', title: '已经过期的公告', expires_at: iso(-2) },
+        { now, showExpired: true },
+      ),
+      renderMessageCard(
+        { ...demo, id: 'd', title: '管理页里的卡片（带操作按钮）' },
+        {
+          now,
+          extraBadges: [{ label: '未到发布时间', kind: 'accent' }],
+          actions: [
+            { label: '编辑', onClick: () => {} },
+            { label: '删除', kind: 'danger', onClick: () => {} },
+          ],
+        },
+      ),
+    );
+
+    /* —— 徽章 —— */
+    for (const [label, kind] of [
+      ['紧急', 'danger'],
+      ['即将过期', 'warn'],
+      ['已过期', 'muted'],
+      ['未到发布时间', 'accent'],
+      ['刚保存', 'success'],
+    ]) {
+      qs('#badges').append(el('span', { class: `badge badge--${kind}`, text: label }));
+    }
+
+    /* —— 按钮 —— */
+    qs('#buttons').append(
+      el('button', { class: 'btn btn--primary', text: '发布公告' }),
+      el('button', { class: 'btn', text: '普通按钮' }),
+      el('button', { class: 'btn btn--ghost', text: '次要按钮' }),
+      el('button', { class: 'btn btn--danger', text: '删除' }),
+      el('button', { class: 'btn btn--small', text: '小按钮' }),
+      el('button', { class: 'btn', text: '禁用状态', disabled: true }),
+      el('button', { class: 'btn btn--primary btn--block', text: '整行按钮（对话框里用的）' }),
+    );
+
+    /* —— 筛选栏 —— */
+    qs('#demo-filter').append(renderFilterBar({ onChange: () => {} }).element);
+
+    /* —— 状态占位 —— */
+    qs('#states').append(
+      states.emptyState(),
+      states.emptyState('没有找到符合条件的公告', '试试换个关键词，或者把时间范围清空。'),
+      states.errorState('连不上服务器，请检查网络后重试。', () => {}),
+      states.noticeState('尚未公开发布（仅通过链接可见）', '这条公告的发布时间还没到。'),
+    );
+
+    /* —— 骨架 —— */
+    qs('#skeleton').append(states.loadingState());
+
+    /* —— 提示 —— */
+    qs('#toasts').append(
+      el('div', { class: 'toast toast--success', text: 'Word 备份已保存：班级公告栏备份-2026-10-10-2243.docx' }),
+      el('div', { class: 'toast toast--error', text: '发布失败：数据库里缺少字段，请先跑 schema.sql' }),
+      el('div', { class: 'toast', text: '普通提示' }),
+    );
+
+    /* —— 色板 —— */
+    const colors = [
+      ['页面底色', '--color-bg'],
+      ['页头渐变', '--color-bg-top'],
+      ['卡片', '--color-surface'],
+      ['次级底色', '--color-surface-alt'],
+      ['边框', '--color-border'],
+      ['分隔线', '--color-divider'],
+      ['强调色', '--color-accent'],
+      ['强调浅底', '--color-accent-soft'],
+      ['正文', '--color-text-soft'],
+      ['次要文字', '--color-muted'],
+      ['辅助文字', '--color-muted-soft'],
+      ['紧急红', '--color-danger'],
+      ['警告黄', '--color-warn'],
+      ['成功绿', '--color-success'],
+    ];
+    const styles = getComputedStyle(document.documentElement);
+    for (const [label, name] of colors) {
+      qs('#swatches').append(
+        el(
+          'div',
+          { class: 'sg-swatch' },
+          el('div', { class: 'sg-swatch__chip', style: `background: var(${name})` }),
+          el('div', { class: 'sg-swatch__name', text: `${label}  ${styles.getPropertyValue(name).trim()}` }),
+        ),
+      );
+    }
+
+    // 顶部紧急标记加个图标（和首页一致）
+    const flag = qs('.urgent-flag');
+    if (flag) flag.prepend(icon('urgent'));
+  </script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+# Netlify 自定义响应头（这个文件放在发布目录根目录即生效，拖 zip 部署同样管用）
+#
+# 为什么需要：静态托管默认不带这些安全头。它们不影响功能，
+# 但能给浏览器多加一层保护。`tools/attack-check.py` 会实测确认它们真的生效。
+#
+# 语法：路径规则 + 缩进的 "头名: 值"。/* 表示对所有路径生效。
+
+/*
+  # 不让浏览器"猜"文件类型 —— 防止把 .txt 当成脚本执行
+  X-Content-Type-Options: nosniff
+
+  # 不允许别人把你的页面套进 iframe（防点击劫持：伪造一个登录框骗你输入）
+  X-Frame-Options: DENY
+
+  # 跳转到外部网站时，只带域名、不带完整路径（少泄漏一点信息）
+  Referrer-Policy: strict-origin-when-cross-origin
+
+  # 关掉本站用不到的浏览器能力，万一被注入脚本也少一些可乘之机
+  Permissions-Policy: camera=(), microphone=(), geolocation=(), payment=(), usb=(), magnetometer=(), gyroscope=(), midi=()
+
+# 说明：这里**故意没有**加 Content-Security-Policy（CSP）。
+# CSP 能进一步限制"页面只允许加载哪些外部脚本"，但它的规则必须和
+# Cloudflare Turnstile（验证码 iframe）以及页面里的内联样式精确匹配，
+# 写错会直接把登录弄坏。要加的话应该单独做一次、并在浏览器里实测验证。
+# 目前本站的 XSS 面已经很小：全站不使用 innerHTML 写用户内容（见 ui/dom.js）。
