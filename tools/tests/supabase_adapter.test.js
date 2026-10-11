@@ -598,6 +598,38 @@ test('★ 代理不存在时 Pages 会回 405（实测），登录要能退回�
   }
 });
 
+test('★ 200 但返回的是网页（Pages 回落到 index.html）也要退回直连', async () => {
+  // 这是实测遇到的真实情况：/api 上没有 Function 时，Pages 不是回 404，
+  // 而是回 200 + text/html（整站首页）。只按状态码判断就会把 HTML 当数据。
+  reset();
+  pretendOnPages();
+  const realFetch = globalThis.fetch;
+  const seen = [];
+  globalThis.fetch = async (url, init) => {
+    seen.push(String(url));
+    if (String(url).includes('/api/')) {
+      return new Response('<!DOCTYPE html>\n<html lang="zh-CN"><head>…</head></html>', {
+        status: 200,
+        headers: { 'Content-Type': 'text/html; charset=utf-8' },
+      });
+    }
+    return realFetch(url, init);
+  };
+  const source = createSupabaseSource();
+  try {
+    const messages = await source.listMessages();
+    assert.ok(Array.isArray(messages), '应当拿到真数据，而不是把 HTML 当数据');
+    assert.ok(
+      seen.some((url) => url.startsWith(base) && url.includes('/rest/v1/messages')),
+      '应当退回直连 Supabase',
+    );
+  } finally {
+    globalThis.fetch = realFetch;
+    stopPretending();
+    reset();
+  }
+});
+
 test('★ 写入遇到 404（代理不存在）也退回直连 —— 请求根本没到 Supabase，不会重复发布', async () => {
   reset();
   pretendOnPages();

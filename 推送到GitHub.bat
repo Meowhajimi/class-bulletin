@@ -82,10 +82,12 @@ if errorlevel 1 (
 
 echo.
 echo ============================================
-echo   推送完成 ✅
+echo   Push done. Cloudflare will deploy automatically.
 echo ============================================
 echo.
-echo   Cloudflare Pages 会在十几秒内自动重新部署。
-echo   过一分钟后打开 https://class-bulletin.pages.dev/ 按 Ctrl+F5 看看。
+echo   Wait about 1 minute, then open this URL
+echo   and press Ctrl+F5 to hard-refresh:
+echo.
+echo     https://class-bulletin.pages.dev/
 echo.
 pause

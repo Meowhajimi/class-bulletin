@@ -97,6 +97,23 @@ async function parseBody(response) {
 }
 
 /**
+ * 这个 200 响应其实是网页，不是 Supabase 的数据。
+ *
+ * ★ 为什么必须判断：Cloudflare Pages 对**未知路径会回落到 index.html**
+ *   （200 + text/html）。所以当 `/api` 上没有 Function 时，我们拿到的
+ *   不是 404，而是一个 200 的 HTML 页面 —— 如果只按状态码判断，
+ *   就会把这个 HTML 当数据去解析，轻则显示"0 条公告"，重则各种奇怪的报错。
+ *
+ *   Supabase 的接口永远是 JSON，所以"200 但是 HTML"可以确定就是没有代理，
+ *   应当当成 404 处理，好让 send() 退回直连。
+ */
+function isHtmlInsteadOfData(response, payload) {
+  const contentType = (response.headers.get('content-type') || '').toLowerCase();
+  if (contentType.includes('text/html')) return true;
+  return typeof payload === 'string' && /^\s*<(?:!doctype|html)/i.test(payload);
+}
+
+/**
  * 组装请求头：Supabase 需要 apikey，本地服务器会忽略它。
  *
  * ⚠️ 这里有个容易踩的坑，两种 key 的用法不一样：
@@ -325,6 +342,15 @@ async function sendOnce(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   const payload = await parseBody(response);
+
+  // 200 但拿到的是网页 → 说明这个地址上没有 API 代理（Pages 回落到了 index.html）。
+  // 当成 404 抛出去，好让 send() 换地址退回直连 Supabase。
+  if (response.ok && isHtmlInsteadOfData(response, payload)) {
+    throw new DataError('这个地址上没有 API 代理，将改用直连。', {
+      status: 404,
+      code: 'NO_PROXY',
+    });
+  }
 
   const session = sessionStore.load();
   if (response.status === 401 && useSession && allowRefresh && session && session.refreshToken) {

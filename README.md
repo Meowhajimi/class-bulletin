@@ -22,7 +22,7 @@
 | **`发布到Cloudflare.bat`** | ★ 更新**主站**（Cloudflare Pages）—— 会跑一次打包并打开控制台 |
 | **`备份公告到Word.bat`** | 把云端全部公告导出成 Word，存到 `backups\` |
 | **`云端自检.bat`** | 检查线上是否正常：能读公告 / 注册已关 / 同学不能发布 |
-| **`跑测试.bat`** | 改完代码跑一遍全部测试（8 个套件，**416 项**） |
+| **`跑测试.bat`** | 改完代码跑一遍全部测试（8 个套件，**417 项**） |
 
 > **主站地址**：<https://class-bulletin.pages.dev/>（Cloudflare Pages）
 > **备用地址**：<https://class-bulletin-major.netlify.app>（Netlify）
@@ -494,7 +494,7 @@ python tools/tests/theme_test.py
 "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
 ```
 
-> 合计 **416 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面 8 个套件依次跑完。
+> 合计 **417 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面 8 个套件依次跑完。
 
 node 不在 PATH 时用完整路径：
 `"C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"`
