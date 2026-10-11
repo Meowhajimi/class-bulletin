@@ -63,7 +63,8 @@
 2. 打开本仓库的 [`schema.sql`](./schema.sql)，**全部复制**粘贴进去。
 3. 点 **Run**（或按 Ctrl+Enter）。
 4. 看到 `Success. No rows returned` 就成功了。
-5. 左侧 **Table Editor** 里应该能看到 `messages` 表。
+5. 左侧 **Table Editor** 里应该能看到 **`messages`** 和 **`sections`** 两张表。
+   （`sections` 是**栏目**表；里面会有一行默认栏目「学习委员通知」，可以随时在管理页改名。）
 
 ## 第 3 步：关闭公开注册（很重要，别跳过）
 

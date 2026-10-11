@@ -22,7 +22,7 @@
 | **`发布到Cloudflare.bat`** | ★ 更新**主站**（Cloudflare Pages）—— 会跑一次打包并打开控制台 |
 | **`备份公告到Word.bat`** | 把云端全部公告导出成 Word，存到 `backups\` |
 | **`云端自检.bat`** | 检查线上是否正常：能读公告 / 注册已关 / 同学不能发布 |
-| **`跑测试.bat`** | 改完代码跑一遍全部测试（9 个套件，**484 项**） |
+| **`跑测试.bat`** | 改完代码跑一遍全部测试（11 个套件，**576 项**） |
 | **`公开前体检.bat`** | 想把源码公开给同学之前跑一遍：查机密 key / 本机专用文件 / 个人信息 / 乱码 |
 | **`推送到GitHub.bat`** | 改完网页后一键更新主站（打包 → 提交 → 推送，Cloudflare 自动部署） |
 
@@ -55,8 +55,12 @@
 
 | 谁能用 | 功能 |
 |---|---|
-| **同学** | 看公告（紧急的排最前、红色标记）· **搜索关键词** · **按日期范围筛选** · 点进 **详情页** 看完整正文（适合超长通知）· 右上角刷新 · 页脚角落 **下载 Word 备份** · 页脚一行小字看**当前在线人数** |
-| **你（学委）** | 登录后发布 / 修改 / 删除 · 可设 **发布时间**（补录过去或定时未来）· 可设 **过期时间** · 可勾选 **紧急公告** · 每条都有 **查看详情** 可预览 · 保存后**询问是否下载 Word 备份** · 随时导出全部（含定时未发布）· **本机安全页面**看黑名单 |
+| **同学** | **按栏目浏览**（顶部标签：总栏目 + 各栏目）· 看公告（紧急的排最前、红色标记）· **搜索关键词** · **按日期范围筛选** · 点进 **详情页** 看完整正文（适合超长通知）· 右上角刷新 · 页脚角落 **下载 Word 备份** · 页脚一行小字看**当前在线人数** |
+| **你（学委）** | 登录后发布 / 修改 / 删除 · **增删改栏目**（名称自定义，同学只能看）· 发布时**选择所属栏目** · 可设 **发布时间**（补录过去或定时未来）· 可设 **过期时间** · 可勾选 **紧急公告** · 每条都有 **查看详情** 可预览 · 保存后**询问是否下载 Word 备份** · 随时导出全部（含定时未发布）· **本机安全页面**看黑名单 |
+
+> **「总栏目」是什么**：它不是数据库里的一行，而是首页第一个标签上的**视图** ——
+> 把所有栏目的**紧急公告**汇总在一起。平时按栏目看，出急事先看总栏目。
+> 每个栏目内部则是**先紧急、后普通**，同一条公告只出现一次。
 
 ### 或者用命令行
 
@@ -133,7 +137,7 @@ learn web\
 │     ├─ message.js         详情页逻辑
 │     ├─ admin.js           管理页逻辑（登录 → 增删改 → 询问备份）
 │     ├─ data\              ★数据层：换后端只动这里
-│     │  ├─ contract.js     接口契约（7 个方法）+ 错误类型 + 紧急判断
+│     │  ├─ contract.js     接口契约（含栏目）+ 错误类型 + 紧急/栏目归属判断
 │     │  ├─ supabase.js     连 Supabase / 本地服务器（纯 fetch）
 │     │  ├─ memory.js       离线模式（存在浏览器里）
 │     │  ├─ backup.js       把公告整理成 Word 内容
@@ -142,12 +146,13 @@ learn web\
 │     └─ ui\                界面零件
 │        ├─ dom.js          创建元素的工具（全站不用 innerHTML）
 │        ├─ time.js         ★过期判定、时间显示、发布时间校验（有单元测试）
-│        ├─ filter.js       ★排序与筛选/搜索规则（纯函数，有单元测试）
+│        ├─ filter.js       ★排序/筛选/搜索 + 栏目归属与总栏目汇总（纯函数，有单元测试）
 │        ├─ filter-bar.js   首页的搜索与筛选栏
+│        ├─ section-tabs.js 顶部的栏目标签行（总栏目 + 各栏目）
 │        ├─ message-card.js ★消息卡片模板（紧急徽章、摘要、详情链接）
 │        ├─ icon.js         极简 SVG 图标（用 createElementNS，不引入图标库）
 │        ├─ docx.js         零依赖生成 Word 文件
-│        ├─ dialog.js       模态询问框
+│        ├─ dialog.js       模态询问框 + 输入框（栏目改名用）
 │        └─ states.js       加载中 / 空 / 出错 / 未配置（都带图标）
 │
 ├─ supabase\
@@ -337,6 +342,11 @@ python tools\backup-to-word.py --from-json backups\班级公告栏备份-2026-10
 
 ### 5.2 照抄：加一个字段（以"分类 category"为例）
 
+> **栏目（多栏目功能）已经做好了**，可以直接用，不用照这一节做。
+> 栏目走的是**另一张表 + 外键**（`sections.id` ← `messages.section_id`），
+> 而不是给 messages 加一个文本字段 —— 因为栏目要能改名，改名后所有公告跟着走。
+> 这一节留作**加普通字段**的模板。
+
 **第 1 步** — `supabase/schema.sql` 末尾加一行，然后在 Supabase SQL Editor 跑一次：
 
 ```sql
@@ -351,6 +361,12 @@ alter table public.messages add column if not exists category text;
         conn.execute("alter table messages add column category text")
         conn.commit()
 ```
+
+> ⚠️ **给新字段建索引时，索引也要放在 `_migrate()` 里建**，不要写进 `SCHEMA`。
+> `SCHEMA` 是在 `_migrate()` **之前**执行的，老库里还没这一列，
+> `create index ... on messages (新列)` 会直接报 `no such column`，
+> 连补列的机会都没有。（`section_id` 的索引就是这样踩过一次，
+> 被 `api_smoke.py` 的"老库迁移"用例抓住的。）
 
 并在 `create_message()` 的 insert、`update_message()` 的赋值分支里加上这一列。
 
@@ -478,19 +494,19 @@ import { createMyApiSource } from './myapi.js';
 ## 七、测试与自检
 
 ```bat
-:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（89 项）
+:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（185 项）
 "C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"
 
-:: 后端接口端到端 + 老库迁移（44 项）
+:: 后端接口端到端 + 老库迁移 + 栏目增删改（99 项）
 python tools/tests/api_smoke.py
 
-:: 上传前的机密 key 检测器（15 项）
+:: 上传前的机密 key 检测器（17 项）
 python tools/tests/package_scan_test.py
 
-:: Word 备份生成器（36 项，含"正文标识"与"浏览器端产物"的交叉验证）
+:: Word 备份生成器（47 项，含"正文标识"与"浏览器端产物"的交叉验证）
 python tools/tests/backup_docx_test.py
 
-:: schema.sql 的语句顺序（9 项，防止升级时报 42703）
+:: schema.sql 的语句顺序 + 栏目名长度三处一致（22 项，防止升级时报 42703）
 python tools/tests/schema_order_test.py
 
 :: 主题一致性（34 项）：CSS 变量有没有悬空、深色模式有没有漏、文字对比度够不够
@@ -502,7 +518,7 @@ python tools/tests/theme_test.py
 "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
 ```
 
-> 合计 **484 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面 8 个套件依次跑完。
+> 合计 **576 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
 
 node 不在 PATH 时用完整路径：
 `"C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"`
@@ -511,14 +527,16 @@ node 不在 PATH 时用完整路径：
 |---|---|
 | `tools/tests/time.test.js` | 过期判定、定时发布、时间显示格式、**发布时间校验**（过去的/未来的/乱填的） |
 | `tools/tests/filter.test.js` | 搜索关键词、日期范围筛选（**含边界当天**）、**紧急优先排序** |
+| `tools/tests/section.test.js` | **栏目规则**：公告→栏目归属（含 section_id 为空/指向已删栏目）、总栏目=各栏目紧急汇总、栏目内先紧急后普通、标签上的紧急计数、栏目名规范 |
 | `tools/tests/dom.test.js` | DOM 工具：文字/数组/条件渲染，以及**子节点误传对象时不能显示成 `[object Object]`** |
-| `tools/tests/render.test.js` | **渲染冒烟测试**：把所有组件（卡片/图标/状态/筛选栏/对话框）真的渲染一遍，断言**一条警告都没有** |
+| `tools/tests/render.test.js` | **渲染冒烟测试**：把所有组件（卡片/图标/状态/筛选栏/**栏目标签行**/对话框）真的渲染一遍，断言**一条警告都没有** |
 | `tools/tests/fake-dom.js` | 上面两个测试共用的最小 DOM 替身（不是测试文件，不会被当成测试跑） |
 | `tools/tests/docx.test.js` | **Word 文件字节级校验**：zip 结构、CRC32、XML 转义、控制字符清理 |
-| `tools/tests/supabase_adapter.test.js` | 请求头（含新旧 key 格式）、401 自动续期、机密 key 拦截、各种错误提示 |
-| `tools/tests/api_smoke.py` | 登录、增删改查、未授权写入被拒、排序、静态文件 MIME |
+| `tools/tests/supabase_adapter.test.js` | 请求头（含新旧 key 格式）、401 自动续期、机密 key 拦截、**栏目增删改与重名/非空拒删的提示**、各种错误提示 |
+| `tools/tests/api_smoke.py` | 登录、增删改查、未授权写入被拒、排序、静态文件 MIME、**栏目接口（同学只读、非空栏目拒删、最后一个栏目拒删）**、**老库自动补列+建默认栏目+回填** |
 | `tools/tests/package_scan_test.py` | 上传前的机密 key 检测（既不误报注释，也不漏报真 key） |
-| `tools/tests/backup_docx_test.py` | Word 备份的内容与状态判断、**正文标识与缩进**、两套实现排版是否一致；并调 node 交叉验证浏览器端产物 |
+| `tools/tests/backup_docx_test.py` | Word 备份的内容与状态判断、**栏目名**、**正文标识与缩进**、两套实现排版是否一致；并调 node 交叉验证浏览器端产物 |
+| `tools/tests/wiring_test.py` | **接线检查**：import 的文件/名字是否存在、**每个 `qs('#id')` 在对应 HTML 里有没有这个元素**（漏了会白屏，而别的测试都不会红）、栏目功能的关键元素是否齐全 |
 | `tools/tests/theme_test.py` | **主题体检**：`var(--x)` 有没有悬空、深色模式有没有漏项、文字对比度是否达到 WCAG 4.5:1、字号阶梯是否递增 |
 | `tools/tests/security_test.py` | **安全防护**（62 项）：锁定递增数学（10→30 分、20→60 分、30→90 分、31→永久）、攻击特征识别、**正常请求零误报**、黑名单持久化与损坏容错 |
 | `tools/tests/mirror_tool_test.py` | 备用镜像发布工具（33 项）：**抓真实 HTTP 头**验证密钥该放 `apikey` 头，以及密钥形状校验、桶预检 |

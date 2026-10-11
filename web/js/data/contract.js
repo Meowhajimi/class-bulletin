@@ -3,9 +3,15 @@
  *
  * ★ 想接入自建后端、其它 BaaS、甚至是同桌写的接口：
  *   1) 新建 web/js/data/你的名字.js
- *   2) 照着 supabase.js 实现下面 7 个方法
+ *   2) 照着 supabase.js 实现下面这些方法
  *   3) 在 data/index.js 里加一个分支
  *   界面代码（app.js / admin.js / ui/*）一行都不用改。
+ *
+ * @typedef {Object} Section
+ *          栏目。管理员可以增删改名，同学只能查看。
+ * @property {string} id
+ * @property {string} name         1~40 字，不允许重名
+ * @property {string} created_at
  *
  * @typedef {Object} Message
  * @property {string}      id
@@ -14,12 +20,14 @@
  * @property {string}      published_at  ISO8601，UTC
  * @property {string|null} expires_at    ISO8601，UTC；null 表示永不过期
  * @property {boolean}     is_urgent     紧急公告（主界面右下角标红）
+ * @property {string}      section_id    所属栏目；老数据迁移后都有值
  * @property {string}      created_at
  * @property {string}      updated_at
  *
  * @typedef {Object} MessageInput
  * @property {string}      title
  * @property {string}      body
+ * @property {string}      [section_id]
  * @property {string}      [published_at]
  * @property {string|null} [expires_at]
  * @property {boolean}     [is_urgent]
@@ -36,6 +44,12 @@
  * @property {(input: MessageInput) => Promise<Message>} createMessage
  * @property {(id: string, patch: Partial<MessageInput>) => Promise<Message>} updateMessage
  * @property {(id: string) => Promise<void>} deleteMessage
+ * @property {() => Promise<Section[]>} listSections
+ * @property {(name: string) => Promise<Section>} createSection
+ * @property {(id: string, name: string) => Promise<Section>} renameSection
+ * @property {(id: string) => Promise<void>} deleteSection
+ *           删除栏目。栏目里还有公告、或它是最后一个栏目时，后端会拒绝
+ *           （抛 DataError，message 里是可直接展示的中文原因）
  * @property {(email: string, password: string) => Promise<Session>} signIn
  * @property {() => Promise<void>} signOut
  * @property {() => Session|null} getSession
@@ -110,6 +124,51 @@ export function isUrgentMessage(message) {
   if (typeof value === 'number') return value !== 0;
   if (typeof value === 'string') return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
   return false;
+}
+
+/** 栏目名的长度上限。与 supabase/schema.sql 的 check(... between 1 and 40)、
+ *  server/db.py 的 SECTION_NAME_MAX、以及管理页输入框的 maxlength 保持一致
+ *  （有测试盯着这四处）。 */
+export const SECTION_NAME_MAX = 40;
+
+/**
+ * 栏目名的规范化：去掉首尾空格。
+ *
+ * 只做 trim —— 中文栏目名里"班委通知 "和"班委通知"显然是同一个，
+ * 但没必要把英文缩写按大小写合并（那会让"Class"和"class"意外撞车）。
+ *
+ * @param {unknown} text
+ * @returns {string}
+ */
+export function normalizeSectionName(text) {
+  return String(text ?? '').trim();
+}
+
+/**
+ * 找出某条公告所属的栏目。
+ *
+ * ★ 全站唯一的"公告 → 栏目"规则入口。三种情况都在这里收口：
+ *   1. 正常：section_id 命中某个栏目
+ *   2. 兜底：section_id 为空、或指向一个已经不存在的栏目
+ *      （老库还没迁移、或数据被外部改过）→ 归到**第一个栏目**
+ *   3. sections 为空（数据库还没建栏目表）→ 返回 null，由调用方决定怎么显示
+ *
+ * 之所以要兜底而不是报错：同学打开页面看到公告比看到"数据异常"重要得多。
+ *
+ * @param {{section_id?: unknown}} message
+ * @param {Array<{id: string, name: string}>} sections
+ * @returns {{id: string, name: string}|null}
+ */
+export function sectionOf(message, sections) {
+  const list = Array.isArray(sections) ? sections.filter(Boolean) : [];
+  if (!list.length) return null;
+
+  const wanted = String((message && message.section_id) || '').trim();
+  if (wanted) {
+    const matched = list.find((item) => String(item.id) === wanted);
+    if (matched) return matched;
+  }
+  return list[0];
 }
 
 /** Supabase 与本地服务器都会把错误放在这些字段里，逐个试一遍。 */

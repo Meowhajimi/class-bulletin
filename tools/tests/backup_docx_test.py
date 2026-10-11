@@ -77,6 +77,7 @@ SAMPLE = [
         "published_at": "2026-10-10T05:21:00+00:00",
         "expires_at": "2099-01-01T00:00:00+00:00",
         "is_urgent": True,
+        "section_id": "sec-study",
     },
     {
         "id": "m2",
@@ -85,6 +86,7 @@ SAMPLE = [
         "published_at": "2020-01-01T00:00:00+00:00",
         "expires_at": "2020-02-01T00:00:00+00:00",
         "is_urgent": False,
+        "section_id": "sec-study",
     },
     {
         "id": "m3",
@@ -92,7 +94,15 @@ SAMPLE = [
         "body": "",
         "published_at": "2026-10-01T00:00:00+00:00",
         "expires_at": None,
+        # 故意给一个不存在的栏目：应回退到第一个栏目（与前端 sectionOf 一致）
+        "section_id": "sec-gone",
     },
+]
+
+# 与 server/db.py / schema.sql 对应的示例栏目
+SAMPLE_SECTIONS = [
+    {"id": "sec-study", "name": "学习委员通知"},
+    {"id": "sec-class", "name": "班级事务"},
 ]
 
 
@@ -119,7 +129,10 @@ def main() -> int:
 
     with tempfile.TemporaryDirectory() as temp_dir:
         path = os.path.join(temp_dir, "备份.docx")
-        _backup.write_docx(path, _backup.build_document_xml(SAMPLE, "https://demo.supabase.co", NOW))
+        _backup.write_docx(
+            path,
+            _backup.build_document_xml(SAMPLE, "https://demo.supabase.co", NOW, SAMPLE_SECTIONS),
+        )
 
         check("文件已生成", os.path.isfile(path))
         check("文件不是空的", os.path.getsize(path) > 500, f"{os.path.getsize(path)} 字节")
@@ -137,6 +150,25 @@ def main() -> int:
         check("尖括号与 & 号原样显示（未被破坏）", "标题里有 <尖括号> 和 & 符号" in text)
         check("空正文有占位提示", "（无正文）" in text)
         check("有结束标记", "备份结束（共 3 条）" in text)
+
+        print("\n二之一、栏目（多栏目功能）")
+        check("写进了栏目名", "栏目：学习委员通知" in text, "备份里要能看出公告属于哪一栏")
+        check(
+            "★ 栏目找不到时回退到第一个栏目（与前端 sectionOf 一致）",
+            "栏目：学习委员通知" in text and "sec-gone" not in text,
+        )
+        check(
+            "没有栏目表时显示「未分类」（不能崩，也不能留空）",
+            _backup.section_name_of(SAMPLE[0], []) == "未分类",
+        )
+        check(
+            "section_name_of 认得自己那个栏目",
+            _backup.section_name_of(SAMPLE[1], SAMPLE_SECTIONS) == "学习委员通知",
+        )
+        check(
+            "section_name_of 对空 section_id 也回退到第一个",
+            _backup.section_name_of({"section_id": ""}, SAMPLE_SECTIONS) == "学习委员通知",
+        )
 
         print("\n二之二、紧急标记")
         check("紧急公告在标题前带【紧急】", "【紧急】本周五交实验报告" in text)
@@ -184,6 +216,26 @@ def main() -> int:
             "两边的 BLOCK_STYLES 完全一致",
             js_block_styles() == _backup.BLOCK_STYLES,
             f"JS={js_block_styles()}  PY={_backup.BLOCK_STYLES}",
+        )
+
+        # ★ 元信息行的字段也要一致：网页上导出和命令行导出的 Word
+        #   应当是同一份文档，不能一个带栏目、一个不带。
+        js_backup_source = read_text(os.path.join(
+            BASE_DIR, "web", "js", "data", "backup.js"
+        ))
+        for field in ("栏目：", "发布时间：", "状态：", "标记：紧急"):
+            check(
+                f"JS 那边的元信息行也有「{field}」",
+                field in js_backup_source,
+                "web/js/data/backup.js 里找不到，两套实现可能已经不一致",
+            )
+        check(
+            "JS 侧也走 sectionOf() 取栏目名（规则只定义一次）",
+            "sectionOf(message" in js_backup_source,
+        )
+        check(
+            "JS 侧没有栏目时显示「未分类」，与 Python 一致",
+            "'未分类'" in js_backup_source and "未分类" in read_text(os.path.abspath(_backup.__file__)),
         )
 
     print("\n三、边界情况")
@@ -301,6 +353,15 @@ def run_node(script: str, args: list[str]) -> tuple[bool, str]:
     if completed.returncode != 0:
         return False, (completed.stderr or completed.stdout or "").strip()[:400]
     return True, (completed.stdout or "").strip()
+
+
+def read_text(path: str) -> str:
+    """读一个文本文件（用于静态比对两套实现的字段）。"""
+    try:
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+    except OSError:
+        return ""
 
 
 def js_block_styles() -> dict | None:

@@ -7,7 +7,7 @@
  */
 
 import { CONFIG, inspectApiKey, isConfigured } from './config.js';
-import { isUrgentMessage } from './data/contract.js';
+import { isUrgentMessage, sectionOf } from './data/contract.js';
 import { getDataSource } from './data/index.js';
 import { clear, el, qs, toast } from './ui/dom.js';
 import { renderMessageCard } from './ui/message-card.js';
@@ -61,6 +61,20 @@ function backHome(message) {
   );
 }
 
+/** 「回到该栏目」：带上 ?section=，首页会直接选中对应标签 */
+function backToSection(section) {
+  if (!section) return null;
+  return el(
+    'p',
+    { class: 'detail__back' },
+    el('a', {
+      class: 'card__more-link',
+      href: `index.html?section=${encodeURIComponent(section.id)}`,
+      text: `← 回到「${section.name}」栏目`,
+    }),
+  );
+}
+
 /** 拿不到 id / 找不到公告时的友好页面（不是白屏，也不是报错堆栈） */
 function renderMissing(title, hint) {
   clear(dom.main);
@@ -94,7 +108,12 @@ async function load() {
   setStatus('正在加载…');
 
   try {
-    const messages = await getDataSource().listMessages();
+    const source = getDataSource();
+    // 栏目取不到不影响看公告：拿不到就当作没有栏目（不显示徽章）
+    const [messages, sections] = await Promise.all([
+      source.listMessages(),
+      source.listSections().catch(() => []),
+    ]);
     const message = messages.find((item) => item.id === id);
 
     if (!message) {
@@ -108,10 +127,12 @@ async function load() {
     const now = Date.now();
     const expired = isExpired(message, now);
     const pending = !isPublished(message, now);
+    const section = sectionOf(message, sections);
 
     document.title = `${message.title || '公告'} · ${CONFIG.site.title || '班级公告栏'}`;
 
     const extraBadges = [];
+    if (section) extraBadges.push({ label: section.name, kind: 'accent' });
     if (pending) extraBadges.push({ label: '尚未公开发布（仅通过链接可见）', kind: 'accent' });
     if (isUrgentMessage(message)) setStatus('紧急公告');
 
@@ -124,7 +145,7 @@ async function load() {
         extraBadges,
       }),
     );
-    dom.main.append(backHome());
+    dom.main.append(backToSection(section) || backHome());
 
     if (!pending) {
       setStatus(

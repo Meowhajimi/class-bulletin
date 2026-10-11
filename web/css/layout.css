@@ -139,6 +139,76 @@
   background: var(--color-surface-alt);
 }
 
+/* —— 栏目标签行 ——
+ * 横向一排，一次选中一个；栏目多了在手机上横向滚动，不换行、不挤压标题。
+ */
+
+.section-tabs {
+  display: flex;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+  padding-bottom: var(--space-1);
+  overflow-x: auto;
+  /* 手机上滚动时不要出现滚动条占位跳动 */
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+.section-tabs__tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex: 0 0 auto;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-border);
+  border-radius: 999px;
+  background: var(--color-surface);
+  color: var(--color-muted);
+  font-size: var(--text-sm);
+  font-family: inherit;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background var(--transition-fast), color var(--transition-fast),
+    border-color var(--transition-fast);
+}
+
+.section-tabs__tab:hover {
+  background: var(--color-surface-alt);
+  color: var(--color-text);
+}
+
+.section-tabs__tab--active {
+  background: var(--color-accent);
+  border-color: var(--color-accent);
+  color: var(--color-on-accent);
+  font-weight: 600;
+}
+
+/* 紧急条数小标记：数字那点面积很小，不必为它单独做响应式 */
+.section-tabs__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.25em;
+  padding: 0 0.35em;
+  border-radius: 999px;
+  background: var(--color-danger);
+  color: #ffffff;
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-tabs__tab--active .section-tabs__count {
+  /* 选中态底色本身就是强调色，红标记要和它区分开 */
+  background: #ffffff;
+  color: var(--color-danger);
+}
+
+/* 紧急那一段给一点视觉提示，但不要像原来那样整块变红 */
+.section--urgent .section__title {
+  color: var(--color-danger);
+}
+
 /* —— 页脚 ——
  * 内容全部靠左：右下角有可能浮着「紧急公告」标记，
  * 靠右的内容在手机上会被它盖住（同学就点不到学习委员入口了）。
@@ -192,6 +262,53 @@
   display: grid;
   grid-template-columns: 1fr;
   gap: var(--space-5);
+}
+
+/* 右列：栏目管理 + 已发布公告，两块面板纵向排列 */
+.admin-side {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  min-width: 0;
+}
+
+/* —— 栏目管理面板 —— */
+
+.section-admin__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin-top: var(--space-3);
+}
+
+.section-admin__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  flex-wrap: wrap;
+  padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--color-divider);
+  border-radius: var(--radius-md);
+  background: var(--color-surface-alt);
+}
+
+.section-admin__name {
+  font-weight: 600;
+  /* 长栏目名不要把按钮挤出屏幕 */
+  overflow-wrap: anywhere;
+}
+
+.section-admin__count {
+  color: var(--color-muted);
+  font-size: var(--text-xs);
+  font-variant-numeric: tabular-nums;
+}
+
+.section-admin__actions {
+  display: flex;
+  gap: var(--space-2);
+  /* 靠右，但换行后也不会粘在名字上 */
+  margin-left: auto;
 }
 
 @media (min-width: 900px) {

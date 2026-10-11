@@ -419,6 +419,7 @@ def main() -> int:
         migrated = db.connect(legacy_path)
         legacy_columns = {row["name"] for row in migrated.execute("pragma table_info(messages)")}
         check("自动补上了 is_urgent 列", "is_urgent" in legacy_columns, str(sorted(legacy_columns)))
+        check("自动补上了 section_id 列", "section_id" in legacy_columns, str(sorted(legacy_columns)))
 
         old_row = db.get_message(migrated, "old-1")
         check("老公告没有丢", old_row is not None and old_row["title"] == "升级前的老公告", str(old_row))
@@ -428,8 +429,24 @@ def main() -> int:
             f"实际 {old_row.get('is_urgent')!r}",
         )
 
+        # 老库升级后必须自动有栏目，并且老公告被回填进去 ——
+        # 否则前端会看到一堆"没有栏目"的公告
+        migrated_sections = db.list_sections(migrated)
+        check("老库自动建了默认栏目", len(migrated_sections) == 1, str(migrated_sections))
+        check(
+            "默认栏目名与 schema.sql 一致",
+            migrated_sections and migrated_sections[0]["name"] == db.DEFAULT_SECTION_NAME,
+            str(migrated_sections),
+        )
+        check(
+            "★ 老公告被回填到默认栏目",
+            old_row is not None and old_row.get("section_id") == migrated_sections[0]["id"],
+            f"实际 {old_row.get('section_id') if old_row else None!r}",
+        )
+
         new_row = db.create_message(migrated, {"title": "升级后新公告", "is_urgent": True}, user_id=None)
         check("迁移后能写入紧急公告", new_row.get("is_urgent") is True, str(new_row.get("is_urgent")))
+        check("没传栏目时自动落到默认栏目", new_row.get("section_id") == migrated_sections[0]["id"], str(new_row.get("section_id")))
 
         # 反复调用 connect 应当幂等，不能报"列已存在"
         try:
@@ -488,7 +505,121 @@ def main() -> int:
         status, _, _ = request(f"{base}/rest/v1/rpc/no_such_function", method="POST", body={})
         check("不存在的函数返回 404", status == 404, f"实际 {status}")
 
-        print("\n十一、本地安全防护（登录锁定 / 风控 / 黑名单）")
+        print("\n十一、栏目（sections）")
+        # 需要登录态才能写；先拿一个 token
+        status, login_payload, _ = request(
+            f"{base}/auth/v1/token?grant_type=password",
+            method="POST",
+            body={"email": ADMIN_EMAIL, "password": ADMIN_PASSWORD},
+        )
+        admin_token = (login_payload or {}).get("access_token", "")
+
+        status, sections, _ = request(f"{base}/rest/v1/sections")
+        check("同学无需登录即可读栏目", status == 200 and isinstance(sections, list), f"{status} {sections!r}")
+        check("默认就有一个栏目", len(sections) == 1, str(sections))
+        check(
+            "默认栏目名与 db.py 常量一致",
+            sections and sections[0].get("name") == db.DEFAULT_SECTION_NAME,
+            str(sections),
+        )
+        default_section_id = sections[0]["id"] if sections else ""
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "没登录也想加栏目"}
+        )
+        check("未登录不能新增栏目", status == 401, f"实际 {status}")
+
+        status, created, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "班级事务"}, token=admin_token
+        )
+        check("登录后能新增栏目", status == 201 and created and created[0]["name"] == "班级事务", f"{status} {created!r}")
+        new_section_id = created[0]["id"] if created else ""
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "班级事务"}, token=admin_token
+        )
+        check("栏目重名被拒（409，与 Supabase 的 23505 一致）", status == 409, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "   "}, token=admin_token
+        )
+        check("空栏目名被拒（400）", status == 400, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "长" * 41}, token=admin_token
+        )
+        check("栏目名超过 40 字被拒（400）", status == 400, f"实际 {status}")
+
+        # 首尾空格应当被 trim 后当成同一个名字
+        status, _, _ = request(
+            f"{base}/rest/v1/sections", method="POST", body={"name": "  班级事务  "}, token=admin_token
+        )
+        check("名称首尾空格会被 trim，仍算重名", status == 409, f"实际 {status}")
+
+        status, renamed, _ = request(
+            f"{base}/rest/v1/sections?id=eq.{new_section_id}",
+            method="PATCH",
+            body={"name": "班委通知"},
+            token=admin_token,
+        )
+        check("能重命名栏目", status == 200 and renamed and renamed[0]["name"] == "班委通知", f"{status} {renamed!r}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections?id=eq.{new_section_id}",
+            method="PATCH",
+            body={"name": db.DEFAULT_SECTION_NAME},
+            token=admin_token,
+        )
+        check("改名撞上已有名字也被拒（409）", status == 409, f"实际 {status}")
+
+        # 往新栏目里发一条公告，然后验证"非空栏目不能删"
+        status, made, _ = request(
+            f"{base}/rest/v1/messages",
+            method="POST",
+            body={"title": "班委通知示例", "section_id": new_section_id},
+            token=admin_token,
+        )
+        check("能把公告发到指定栏目", status == 201 and made and made[0].get("section_id") == new_section_id, f"{status} {made!r}")
+        temp_message_id = made[0]["id"] if made else ""
+
+        status, payload, _ = request(
+            f"{base}/rest/v1/sections?id=eq.{new_section_id}", method="DELETE", token=admin_token
+        )
+        check("★ 非空栏目不能删（409）", status == 409, f"实际 {status}")
+        check("拒绝原因写明了「还有 N 条公告」", "还有" in str(payload), str(payload))
+
+        status, _, _ = request(
+            f"{base}/rest/v1/messages?id=eq.{temp_message_id}", method="DELETE", token=admin_token
+        )
+        check("先把里面的公告删掉", status == 204, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections?id=eq.{new_section_id}", method="DELETE", token=admin_token
+        )
+        check("空栏目可以删", status == 204, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections?id=eq.{default_section_id}", method="DELETE", token=admin_token
+        )
+        check("★ 最后一个栏目不能删（409）", status == 409, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/messages",
+            method="POST",
+            body={"title": "发到不存在的栏目", "section_id": "no-such-section"},
+            token=admin_token,
+        )
+        check("发到不存在的栏目被拒（400）", status == 400, f"实际 {status}")
+
+        status, _, _ = request(
+            f"{base}/rest/v1/sections?id=eq.no-such-section",
+            method="PATCH",
+            body={"name": "随便"},
+            token=admin_token,
+        )
+        check("改不存在的栏目返回 404", status == 404, f"实际 {status}")
+
+        print("\n十二、本地安全防护（登录锁定 / 风控 / 黑名单）")
         # 这一段会把 127.0.0.1 锁掉，所以放在最后，并且每小段结束都解封
         guard = api.guard
 

@@ -106,6 +106,26 @@ export const CONFIG = {
     collapseExpired: true,
   },
 
+  /**
+   * 栏目（多栏目功能）。
+   *
+   * 栏目本身存在数据库里（sections 表），管理员在管理页增删改；
+   * 这里只放几个"文案"和一个长度上限，方便你改措辞。
+   */
+  sections: {
+    /** 顶部第一个标签的名字。它只汇总各栏目的紧急公告，不是数据库里的一行 */
+    aggregateName: '总栏目',
+    /** 总栏目没有紧急公告时显示的说明 */
+    aggregateHint: '各栏目的紧急公告都会汇总到这里。',
+    /** 数据库还没建 sections 表时的临时栏目名（降级用，界面不会空白） */
+    fallbackName: '公告',
+    /**
+     * 栏目名长度上限。必须与 supabase/schema.sql 的 check(... between 1 and 40)
+     * 和 server/db.py 的 SECTION_NAME_MAX 一致（有测试盯着这三处）。
+     */
+    nameMaxLength: 40,
+  },
+
   /** 备份行为 */
   backup: {
     /**

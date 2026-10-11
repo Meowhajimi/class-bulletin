@@ -20,6 +20,8 @@ import { captchaTokenForSignIn } from '../ui/captcha.js';
 
 const MESSAGES_PATH = '/rest/v1/messages';
 const SELECT_ALL = 'select=*&order=published_at.desc';
+const SECTIONS_PATH = '/rest/v1/sections';
+const SECTIONS_ALL = 'select=*&order=created_at.asc';
 
 /**
  * 把地址和 key 一起做一次安全检查。
@@ -159,6 +161,17 @@ function errorFromResponse(response, payload, { context } = {}) {
     errorCode === 'PGRST204' ||
     /could not find the ['"]?\w+['"]? column|column .* does not exist|schema cache/i.test(detail);
 
+  // 栏目相关：唯一冲突 / 外键限制。
+  //
+  // 两个后端会给出同一个语义、同一种状态码，所以只在这里判断一次：
+  //   · 重名        → Postgres 23505 / local 409（都带 code 23505）
+  //   · 栏目里还有公告 → Postgres 23503 / local 409（都带 code 23503）
+  const payloadCode = String((payload && payload.code) || '');
+  const duplicateName =
+    payloadCode === '23505' || /duplicate key|unique constraint|already exists/i.test(detail);
+  const sectionStillUsed =
+    payloadCode === '23503' || /foreign key constraint|violates foreign key/i.test(detail);
+
   // 验证码没通过：Supabase 开了 CAPTCHA 之后，token 缺失或不正确都会落到这里。
   // 必须排在"口令不正确"之前判断，否则会被误报成密码错，让人一直改密码。
   const captchaFailed = /captcha/i.test(detail) || /captcha/i.test(errorCode);
@@ -182,6 +195,12 @@ function errorFromResponse(response, payload, { context } = {}) {
       '这个账号还没激活，所以登录不了（不是口令的问题）。' +
       '请到 Supabase 后台 Authentication → Users：要么把该用户确认，' +
       '要么删掉重建并在添加时勾选「Auto Confirm User」。';
+  } else if (duplicateName && context === 'section') {
+    message = '已经有同名栏目了。换个名字，或者先给原来的栏目改名。';
+  } else if (sectionStillUsed && context === 'section') {
+    message =
+      '这个栏目里还有公告，不能删除。' +
+      '请先把里面的公告改到别的栏目，或者逐条删除，然后再删栏目。';
   } else if (status === 400 && /invalid login|invalid_grant/i.test(detail)) {
     message = '邮箱或口令不正确，请重新输入。';
   } else if (status === 401 && context === 'signin') {
@@ -393,8 +412,19 @@ function normalizeMessage(row) {
     published_at: String(record.published_at || ''),
     expires_at: record.expires_at ? String(record.expires_at) : null,
     is_urgent: Boolean(record.is_urgent),
+    section_id: String(record.section_id || ''),
     created_at: String(record.created_at || ''),
     updated_at: String(record.updated_at || ''),
+  };
+}
+
+/** 栏目：同样补全字段，缺 name 时给一个可读的占位（避免界面出现 undefined） */
+function normalizeSection(row) {
+  const record = row || {};
+  return {
+    id: String(record.id || ''),
+    name: String(record.name || '').trim() || '未命名栏目',
+    created_at: String(record.created_at || ''),
   };
 }
 
@@ -424,6 +454,7 @@ export function createSupabaseSource(options = {}) {
         body: {
           title: input.title,
           body: input.body,
+          section_id: input.section_id || null,
           published_at: input.published_at || new Date().toISOString(),
           expires_at: input.expires_at || null,
           is_urgent: Boolean(input.is_urgent),
@@ -449,6 +480,45 @@ export function createSupabaseSource(options = {}) {
 
     async deleteMessage(id) {
       await send(`${MESSAGES_PATH}?id=eq.${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    /* ---------------- 栏目 ---------------- */
+
+    async listSections() {
+      const payload = await send(`${SECTIONS_PATH}?${SECTIONS_ALL}`);
+      return toRows(payload).map(normalizeSection);
+    },
+
+    async createSection(name) {
+      const payload = await send(SECTIONS_PATH, {
+        method: 'POST',
+        body: { name },
+        extraHeaders: { Prefer: 'return=representation' },
+        // context 决定错误提示的措辞（"已经有同名栏目了"）
+        context: 'section',
+      });
+      const row = toRows(payload)[0];
+      if (!row) throw new DataError('新增栏目失败：服务器没有返回内容，请刷新确认。');
+      return normalizeSection(row);
+    },
+
+    async renameSection(id, name) {
+      const payload = await send(`${SECTIONS_PATH}?id=eq.${encodeURIComponent(id)}`, {
+        method: 'PATCH',
+        body: { name },
+        extraHeaders: { Prefer: 'return=representation' },
+        context: 'section',
+      });
+      const row = toRows(payload)[0];
+      if (!row) throw new DataError('重命名失败：服务器没有返回内容，请刷新确认。');
+      return normalizeSection(row);
+    },
+
+    async deleteSection(id) {
+      await send(`${SECTIONS_PATH}?id=eq.${encodeURIComponent(id)}`, {
+        method: 'DELETE',
+        context: 'section',
+      });
     },
 
     /**

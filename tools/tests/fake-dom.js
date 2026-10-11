@@ -20,6 +20,35 @@ class FakeNode {
     this.open = false;
     this.focused = false;
     this.checked = false;
+
+    // 真实浏览器里每个元素都有 classList；组件（如栏目标签行）
+    // 会用 classList.toggle 切换选中态，所以这里补一个最小实现。
+    // 以前没有它时，渲染测试会直接抛 TypeError，而不是给出有用的断言信息。
+    const node = this;
+    this.classList = {
+      add(...names) {
+        const set = new Set(node.className.split(/\s+/).filter(Boolean));
+        for (const name of names) set.add(name);
+        node.className = [...set].join(' ');
+      },
+      remove(...names) {
+        const drop = new Set(names);
+        node.className = node.className
+          .split(/\s+/)
+          .filter((name) => name && !drop.has(name))
+          .join(' ');
+      },
+      contains(name) {
+        return node.className.split(/\s+/).includes(name);
+      },
+      toggle(name, force) {
+        const has = this.contains(name);
+        const want = force === undefined ? !has : Boolean(force);
+        if (want) this.add(name);
+        else this.remove(name);
+        return want;
+      },
+    };
   }
 
   get children() {

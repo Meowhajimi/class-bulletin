@@ -102,6 +102,33 @@ def fetch_messages(url: str, key: str, timeout: int = 20) -> list[dict]:
         return json.loads(response.read().decode("utf-8"))
 
 
+def fetch_sections(url: str, key: str, timeout: int = 20) -> list[dict]:
+    """取回栏目列表。
+
+    栏目是本学期新加的功能：数据库那边要跑一次 schema.sql 才会有 sections 表。
+    站长要是忘了跑，这里会 404 —— 那也不该让整套备份失败，
+    所以调用方会把异常吞掉，退化成"未分类"。
+    """
+    endpoint = f"{url.rstrip('/')}/rest/v1/sections?select=*&order=created_at.asc"
+    request = urllib.request.Request(endpoint, headers={"apikey": key, "Accept": "application/json"})
+    with urllib.request.urlopen(request, timeout=timeout) as response:
+        payload = json.loads(response.read().decode("utf-8"))
+    return payload if isinstance(payload, list) else []
+
+
+def section_name_of(message: dict, sections: list[dict]) -> str:
+    """与前端 data/contract.js 的 sectionOf() 同一套规则：找不到就归到第一个栏目。"""
+    if not sections:
+        return "未分类"
+    wanted = str(message.get("section_id") or "").strip()
+    if wanted:
+        for section in sections:
+            if str(section.get("id") or "") == wanted:
+                return str(section.get("name") or "").strip() or "未命名栏目"
+    first = sections[0]
+    return str(first.get("name") or "").strip() or "未命名栏目"
+
+
 # ============================== 生成 Word ==============================
 
 
@@ -217,9 +244,15 @@ def paragraph(text: str, style: str = "body") -> str:
     return "".join(pieces)
 
 
-def build_document_xml(messages: list[dict], source: str, generated_at: datetime) -> str:
+def build_document_xml(
+    messages: list[dict],
+    source: str,
+    generated_at: datetime,
+    sections: list[dict] | None = None,
+) -> str:
     """生成 word/document.xml。排版与网页上导出的保持一致。"""
     now = datetime.now().astimezone()
+    sections = sections or []
     blocks: list[tuple[str, str]] = [
         ("班级公告栏", "title"),
         ("公告备份文档", "meta"),
@@ -245,8 +278,10 @@ def build_document_xml(messages: list[dict], source: str, generated_at: datetime
                 "heading",
             )
         )
+        # 栏目名与前端 data/backup.js 的输出必须一致（有测试盯着）
         blocks.append(
             (
+                f"栏目：{section_name_of(message, sections)}　"
                 f"发布时间：{format_time(message.get('published_at'))}　"
                 f"状态：{describe_status(message, now)}"
                 + ("　标记：紧急" if urgent else ""),
@@ -297,6 +332,7 @@ def main() -> int:
     os.makedirs(out_dir, exist_ok=True)
 
     url = ""
+    sections: list[dict] = []
     if args.from_json:
         json_path = os.path.abspath(args.from_json)
         if not os.path.isfile(json_path):
@@ -306,6 +342,9 @@ def main() -> int:
             payload = json.load(handle)
         messages = payload.get("messages", payload if isinstance(payload, list) else [])
         url = payload.get("source", "") if isinstance(payload, dict) else ""
+        # 备份 json 里也会存栏目（老 json 没有这个字段，取不到就是空列表）
+        if isinstance(payload, dict):
+            sections = payload.get("sections") or []
         print(f"[数据] 从本地文件读取：{json_path}")
     else:
         if not os.path.isfile(args.config):
@@ -332,6 +371,14 @@ def main() -> int:
             print("       （已有备份不会被改动，可放心。）")
             return 1
 
+        # 栏目是后加的功能：取不到就退化成"未分类"，绝不能因此让备份失败
+        try:
+            sections = fetch_sections(url, key)
+        except Exception:  # noqa: BLE001 —— 备份正文比栏目名重要得多
+            sections = []
+            if not args.quiet:
+                print("[提示] 没取到栏目列表（可能还没跑 schema.sql），栏目一列显示为「未分类」。")
+
     if not messages:
         print("[提示] 云端目前没有任何公告，不生成空备份。")
         return 0
@@ -341,7 +388,7 @@ def main() -> int:
     docx_path = os.path.join(out_dir, f"班级公告栏备份-{stamp}.docx")
     json_path = os.path.join(out_dir, f"班级公告栏备份-{stamp}.json")
 
-    write_docx(docx_path, build_document_xml(messages, url, generated_at))
+    write_docx(docx_path, build_document_xml(messages, url, generated_at, sections))
 
     with open(json_path, "w", encoding="utf-8") as handle:
         json.dump(
@@ -349,6 +396,8 @@ def main() -> int:
                 "source": url,
                 "exported_at": generated_at.isoformat(timespec="seconds"),
                 "count": len(messages),
+                # 一并存栏目：以后从 json 重新生成 Word 时栏目名还在
+                "sections": sections,
                 "messages": messages,
             },
             handle,

@@ -6,8 +6,80 @@
  *   · 筛选逻辑（关键词 / 时间范围）是最容易写错边界的地方，必须能测
  */
 
-import { isUrgentMessage } from '../data/contract.js';
+import { isUrgentMessage, sectionOf } from '../data/contract.js';
 import { parseTime } from './time.js';
+
+/**
+ * 顶部标签行里"总栏目"的 id。
+ *
+ * 为什么用这么个带下划线的怪字符串：它要能安全地和一个真实的栏目 id 比较。
+ * 数据库里的 id 是 uuid（云端）或 uuid 形式的 text（本地），
+ * 绝不会长成这样，所以不会撞车。
+ *
+ * ★ 总栏目**不是一行数据**，只是前端的一个视图：把所有栏目的紧急公告汇总起来。
+ *   所以它不能改名、不能删除，也不占数据库空间。
+ */
+export const AGGREGATE_SECTION_ID = '__urgent__';
+
+/**
+ * 把一批公告分成「紧急」和「普通」两部分，保持传入顺序。
+ *
+ * 界面里"本栏目先紧急、后普通"就靠它；不要在别处再写一遍判断。
+ *
+ * @param {Array<object>} messages
+ * @returns {{urgent: Array<object>, normal: Array<object>}}
+ */
+export function splitUrgentFirst(messages) {
+  const urgent = [];
+  const normal = [];
+  for (const message of messages || []) {
+    if (isUrgentMessage(message)) urgent.push(message);
+    else normal.push(message);
+  }
+  return { urgent, normal };
+}
+
+/**
+ * 某个标签下应该看到哪些公告。
+ *
+ * · 总栏目（AGGREGATE_SECTION_ID）→ **所有栏目的紧急公告**
+ * · 普通栏目                      → 属于该栏目的全部公告（含紧急，界面再分段）
+ *
+ * 归属判断统一走 contract.js 的 sectionOf()：它会在 section_id 为空、
+ * 或指向一个已不存在的栏目时，把公告归到第一个栏目 —— 这样"老数据还没迁移"
+ * 或者"栏目被外部改过"都不会让公告凭空消失。
+ *
+ * @param {Array<object>} messages
+ * @param {string} sectionId
+ * @param {Array<{id: string, name: string}>} [sections]
+ * @returns {Array<object>}
+ */
+export function messagesOfSection(messages, sectionId, sections = []) {
+  const list = messages || [];
+  if (sectionId === AGGREGATE_SECTION_ID) return list.filter(isUrgentMessage);
+  return list.filter((message) => {
+    const section = sectionOf(message, sections);
+    return Boolean(section) && section.id === sectionId;
+  });
+}
+
+/**
+ * 每个栏目各有几条紧急公告 —— 标签上的小标记用。
+ *
+ * @param {Array<object>} messages
+ * @param {Array<{id: string, name: string}>} sections
+ * @returns {Map<string, number>} 栏目 id → 紧急条数（没有紧急的栏目也会出现在表里，值为 0）
+ */
+export function sectionUrgentCounts(messages, sections = []) {
+  const counts = new Map();
+  for (const section of sections || []) counts.set(section.id, 0);
+  for (const message of messages || []) {
+    if (!isUrgentMessage(message)) continue;
+    const section = sectionOf(message, sections);
+    if (section) counts.set(section.id, (counts.get(section.id) || 0) + 1);
+  }
+  return counts;
+}
 
 /**
  * 全站统一的排序规则：

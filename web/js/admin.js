@@ -6,10 +6,10 @@
  */
 
 import { CONFIG, inspectApiKey, isConfigured } from './config.js';
-import { isUrgentMessage } from './data/contract.js';
+import { isUrgentMessage, sectionOf } from './data/contract.js';
 import { exportBackup } from './data/backup.js';
 import { getDataSource } from './data/index.js';
-import { askDialog } from './ui/dialog.js';
+import { askDialog, askTextDialog } from './ui/dialog.js';
 import { clear, el, qs, toast } from './ui/dom.js';
 import { sortMessages } from './ui/filter.js';
 import { renderMessageCard } from './ui/message-card.js';
@@ -35,9 +35,15 @@ const dom = {
 const state = {
   editingId: /** @type {string|null} */ (null),
   messages: /** @type {any[]} */ ([]),
+  sections: /** @type {Array<{id: string, name: string}>} */ ([]),
+  /** 数据库还没建栏目表时置为真，界面上会给出提示（但公告照常可管理） */
+  sectionsUnavailable: false,
   /** 刚保存过的那条，给卡片加个「刚保存」徽章，方便在大列表里找到它 */
   justSavedId: /** @type {string|null} */ (null),
 };
+
+/** 栏目表不存在时的隐式栏目 id（与 app.js 里那个保持一致） */
+const FALLBACK_SECTION_ID = '__fallback__';
 
 /** 界面元素引用，登录成功后才存在 */
 let ui = /** @type {null|Record<string, any>} */ (null);
@@ -168,6 +174,9 @@ function buildForm() {
   // 紧急公告：勾选后同学主界面右下角会标红
   const urgent = el('input', { type: 'checkbox', id: 'edit-urgent' });
 
+  // 所属栏目：下拉里由 fillSectionOptions() 填当前栏目列表
+  const section = el('select', { class: 'input', id: 'edit-section' });
+
   const modeRadios = ['none', 'at', 'now'].map((value, index) =>
     el(
       'label',
@@ -209,6 +218,16 @@ function buildForm() {
     el(
       'div',
       { class: 'field' },
+      el('label', { class: 'field__label', for: 'edit-section', text: '所属栏目' }),
+      section,
+      el('p', {
+        class: 'field__hint',
+        text: '栏目可以在下面的「栏目管理」里新增和改名；同学只能查看，不能修改。',
+      }),
+    ),
+    el(
+      'div',
+      { class: 'field' },
       el('label', { class: 'field__label', for: 'edit-published', text: '发布时间' }),
       el('div', { class: 'field__row' }, published, publishedNow),
       el('p', {
@@ -236,7 +255,7 @@ function buildForm() {
   form.addEventListener('submit', onSubmit);
   cancel.addEventListener('click', () => resetForm());
 
-  ui = { title, body, published, expires, expiresField, urgent, submit, cancel, form };
+  ui = { title, body, section, published, expires, expiresField, urgent, submit, cancel, form };
   return form;
 }
 
@@ -260,6 +279,8 @@ function resetForm() {
   ui.published.value = toLocalInputValue(Date.now());
   ui.expires.value = '';
   ui.urgent.checked = false;
+  // 栏目回到第一个（默认栏目）——新公告默认发到默认栏目
+  if (ui.section && state.sections[0]) ui.section.value = state.sections[0].id;
   setExpiryMode('none');
   ui.submit.textContent = '发布公告';
   ui.cancel.hidden = true;
@@ -273,6 +294,13 @@ function startEdit(message) {
   ui.body.value = message.body || '';
   ui.published.value = toLocalInputValue(message.published_at) || toLocalInputValue(Date.now());
   ui.urgent.checked = isUrgentMessage(message);
+
+  // 选中这条公告原本所属的栏目（栏目可能已被改名，用 id 匹配）
+  if (ui.section) {
+    const wanted = String(message.section_id || '');
+    const exists = state.sections.some((item) => item.id === wanted);
+    ui.section.value = exists ? wanted : (state.sections[0] ? state.sections[0].id : '');
+  }
 
   if (message.expires_at) {
     ui.expires.value = toLocalInputValue(message.expires_at);
@@ -332,6 +360,7 @@ async function onSubmit(event) {
   const payload = {
     title,
     body: ui.body.value,
+    section_id: ui.section.value,
     published_at: published.iso,
     expires_at: expiresAt,
     is_urgent: ui.urgent.checked,
@@ -407,6 +436,9 @@ function renderAdmin() {
 
   const listContainer = el('div', { class: 'admin-list' });
 
+  // 栏目管理面板：新增 / 重命名 / 删除栏目（同学那边看不到任何入口）
+  const sectionPanel = el('section', { class: 'panel admin-panel' });
+
   // 「每次保存后询问是否备份」开关：关掉对话框后还能从这里打开
   backupAskToggle = el('input', { type: 'checkbox', id: 'ask-backup-after-save' });
   backupAskToggle.addEventListener('change', () => {
@@ -445,7 +477,10 @@ function renderAdmin() {
   );
 
   ui.listContainer = listContainer;
-  dom.main.append(el('div', { class: 'admin-grid' }, formPanel, listPanel));
+  ui.sectionPanel = sectionPanel;
+  dom.main.append(
+    el('div', { class: 'admin-grid' }, formPanel, el('div', { class: 'admin-side' }, sectionPanel, listPanel)),
+  );
   dom.logout.hidden = false;
 
   loadMessages();
@@ -462,7 +497,7 @@ function downloadBackup({ announce = true } = {}) {
   }
 
   try {
-    const fileName = exportBackup(messages, { includeUnpublished: true });
+    const fileName = exportBackup(messages, { includeUnpublished: true, sections: state.sections });
     toast(dom.toasts, `Word 备份已保存：${fileName}`, 'success');
     return fileName;
   } catch (error) {
@@ -525,14 +560,218 @@ async function loadMessages() {
   ui.listContainer.append(loadingState());
 
   try {
-    const messages = await getDataSource().listMessages();
+    const source = getDataSource();
+    // 公告和栏目一起取：栏目取不到也要让公告照常管理（降级，不整页报错）
+    const [messages, sections] = await Promise.all([
+      source.listMessages(),
+      loadSectionsForAdmin(source),
+    ]);
     state.messages = messages;
+    state.sections = sections;
+    fillSectionOptions();
+    renderSections();
     renderList();
-    setStatus(`共 ${messages.length} 条公告 · 上次刷新 ${formatAbsolute(Date.now())}`);
+    setStatus(`共 ${messages.length} 条公告 · ${sections.length} 个栏目 · 上次刷新 ${formatAbsolute(Date.now())}`);
   } catch (error) {
     clear(ui.listContainer);
     ui.listContainer.append(errorState((error && error.message) || '加载失败', () => loadMessages()));
     setStatus('加载失败');
+  }
+}
+
+/**
+ * 管理页取栏目；取不到就降级成一个隐式栏目。
+ *
+ * 与首页 app.js 的 loadSections() 同一个道理：栏目功能要跑 schema.sql，
+ * 忘了跑的时候不能让管理页整个罢工 —— 公告还是能发能改的。
+ */
+async function loadSectionsForAdmin(source) {
+  try {
+    const sections = await source.listSections();
+    if (sections.length) return sections;
+    return [{ id: FALLBACK_SECTION_ID, name: CONFIG.sections.fallbackName || '公告', created_at: '' }];
+  } catch (error) {
+    const status = error && error.status;
+    const code = String((error && error.code) || '');
+    const text = `${(error && error.message) || ''}`;
+    const missing =
+      status === 404 ||
+      ['PGRST205', '42P01'].includes(code) ||
+      /does not exist|schema cache|relation .* not found/i.test(text);
+    if (!missing) throw error;
+    state.sectionsUnavailable = true;
+    return [{ id: FALLBACK_SECTION_ID, name: CONFIG.sections.fallbackName || '公告', created_at: '' }];
+  }
+}
+
+/** 把栏目列表填进"所属栏目"下拉；尽量保留当前选择 */
+function fillSectionOptions() {
+  if (!ui || !ui.section) return;
+  const previous = ui.section.value;
+  clear(ui.section);
+  for (const section of state.sections) {
+    ui.section.append(el('option', { value: section.id, text: section.name }));
+  }
+  const stillThere = state.sections.some((section) => section.id === previous);
+  ui.section.value = stillThere ? previous : (state.sections[0] ? state.sections[0].id : '');
+}
+
+/* ============================ 栏目管理 ============================ */
+
+/**
+ * 渲染「栏目管理」面板。
+ *
+ * 只有登录后的管理页才有这块 —— 同学在首页看不到任何增删改入口，
+ * 而且就算有人手动发请求，后端也会以 401 / RLS 拒绝（"普通成员无法修改栏目"）。
+ */
+function renderSections() {
+  if (!ui || !ui.sectionPanel) return;
+  clear(ui.sectionPanel);
+
+  // ---- 新增 ----
+  const nameInput = el('input', {
+    class: 'input',
+    id: 'new-section-name',
+    type: 'text',
+    maxlength: String(CONFIG.sections.nameMaxLength),
+    placeholder: '新栏目名称，例如：班委通知',
+  });
+  const addButton = el('button', {
+    type: 'button',
+    class: 'btn btn--small',
+    text: '添加栏目',
+  });
+
+  const submitNew = async () => {
+    const name = nameInput.value.trim();
+    if (!name) {
+      toast(dom.toasts, '请先填栏目名称', 'error');
+      nameInput.focus();
+      return;
+    }
+    addButton.disabled = true;
+    try {
+      await getDataSource().createSection(name);
+      nameInput.value = '';
+      toast(dom.toasts, `已添加栏目「${name}」`, 'success');
+      await loadMessages();
+    } catch (error) {
+      toast(dom.toasts, (error && error.message) || '添加失败', 'error');
+    } finally {
+      addButton.disabled = false;
+    }
+  };
+
+  addButton.addEventListener('click', submitNew);
+  nameInput.addEventListener('keydown', (event) => {
+    if (event.key === 'Enter') {
+      event.preventDefault();
+      submitNew();
+    }
+  });
+
+  ui.sectionPanel.append(
+    el('h2', { class: 'section__title', text: '栏目管理' }),
+    el('p', {
+      class: 'field__hint',
+      text: '栏目显示在首页顶部；同学只能查看，不能修改。删除栏目要求栏目里已经没有公告。',
+    }),
+    el('div', { class: 'field__row' }, nameInput, addButton),
+  );
+
+  if (state.sectionsUnavailable) {
+    ui.sectionPanel.append(
+      el('p', {
+        class: 'field__hint field__hint--warn',
+        text: '⚠️ 数据库里还没有栏目表：请到 Supabase → SQL Editor 把 supabase/schema.sql 完整跑一遍。',
+      }),
+    );
+  }
+
+  // ---- 列表 ----
+  const list = el('div', { class: 'section-admin__list' });
+  for (const section of state.sections) {
+    const used = state.messages.filter((message) => message.section_id === section.id).length;
+    const isFallbackOnly = section.id === FALLBACK_SECTION_ID;
+
+    const renameButton = el('button', {
+      type: 'button',
+      class: 'btn btn--small btn--ghost',
+      text: '重命名',
+      disabled: isFallbackOnly,
+      onclick: () => renameSectionFlow(section),
+    });
+    const deleteButton = el('button', {
+      type: 'button',
+      class: 'btn btn--small btn--ghost btn--danger',
+      text: '删除',
+      disabled: isFallbackOnly || used > 0 || state.sections.length <= 1,
+      title: isFallbackOnly
+        ? '数据库里还没有栏目表，暂时不能管理栏目'
+        : used > 0
+          ? `里面还有 ${used} 条公告，先处理掉它们再删`
+          : state.sections.length <= 1
+            ? '至少要保留一个栏目'
+            : '',
+      onclick: () => deleteSectionFlow(section),
+    });
+
+    list.append(
+      el(
+        'div',
+        { class: 'section-admin__row' },
+        el('span', { class: 'section-admin__name', text: section.name }),
+        el('span', { class: 'section-admin__count', text: `${used} 条公告` }),
+        el('span', { class: 'section-admin__actions' }, renameButton, deleteButton),
+      ),
+    );
+  }
+  ui.sectionPanel.append(list);
+}
+
+/** 重命名：弹一个输入框（不用 window.prompt —— 样式不一致，还可能被屏蔽） */
+async function renameSectionFlow(section) {
+  const next = await askTextDialog({
+    title: `重命名栏目「${section.name}」`,
+    label: '新名称',
+    value: section.name,
+    maxLength: CONFIG.sections.nameMaxLength,
+    confirmText: '保存名称',
+  });
+  if (next === null) return;
+  if (!next || next === section.name) return;
+  try {
+    await getDataSource().renameSection(section.id, next);
+    toast(dom.toasts, `已改名为「${next}」`, 'success');
+    await loadMessages();
+  } catch (error) {
+    toast(dom.toasts, (error && error.message) || '重命名失败', 'error');
+  }
+}
+
+/** 删除：先确认（复用站内对话框），失败时把后端给的中文原因原样显示 */
+async function deleteSectionFlow(section) {
+  const used = state.messages.filter((message) => message.section_id === section.id).length;
+  if (used) {
+    toast(dom.toasts, `「${section.name}」里还有 ${used} 条公告，先把它们改到别的栏目或删除`, 'error');
+    return;
+  }
+  // 注意 askDialog 返回的是 { confirmed, remember }，不是布尔值
+  const { confirmed } = await askDialog({
+    title: `删除栏目「${section.name}」？`,
+    text: '栏目本身会被删掉。里面的公告不受影响（这里已经确认没有公告了）。',
+    confirmText: '删除栏目',
+    cancelText: '不删了',
+  });
+  if (!confirmed) return;
+  try {
+    await getDataSource().deleteSection(section.id);
+    toast(dom.toasts, `已删除栏目「${section.name}」`, 'success');
+    // 删掉的可能是当前选中的那个栏目，回到第一个
+    if (ui && ui.section) ui.section.value = '';
+    await loadMessages();
+  } catch (error) {
+    toast(dom.toasts, (error && error.message) || '删除失败', 'error');
   }
 }
 
@@ -552,6 +791,8 @@ function renderList() {
     const notPublished = !isPublished(message, now);
 
     const extraBadges = [];
+    const section = sectionOf(message, state.sections);
+    if (section) extraBadges.push({ label: section.name, kind: 'accent' });
     if (notPublished) extraBadges.push({ label: '未到发布时间', kind: 'accent' });
     if (state.editingId === message.id) extraBadges.push({ label: '编辑中', kind: 'success' });
     if (state.justSavedId === message.id) extraBadges.push({ label: '刚保存', kind: 'success' });

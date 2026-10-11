@@ -39,12 +39,27 @@ const backend = {
   writeStatus: 0,
   /** 为真时登录接口返回 captcha_failed（用来验证验证码失败提示） */
   captchaFailure: false,
+  /** 非 0 时，栏目接口直接返回这个状态码（409 重名 / 403 等） */
+  sectionWriteStatus: 0,
+  /** 栏目写失败时用的错误码：23505 重名 / 23503 外键限制 */
+  sectionWriteCode: '23505',
   requests: /** @type {Array<{method: string, path: string, headers: any, body: any}>} */ ([]),
   refreshCalls: 0,
   messages: [
     { id: 'm1', title: '第一条', body: '正文', published_at: '2025-03-01T00:00:00+00:00', expires_at: null },
   ],
+  sections: [
+    { id: 'sec-study', name: '学习委员通知', created_at: '2025-01-01T00:00:00+00:00' },
+    { id: 'sec-class', name: '班级事务', created_at: '2025-02-01T00:00:00+00:00' },
+  ],
 };
+
+/** 只挑发往栏目接口的请求 */
+function sectionRequests(method) {
+  return backend.requests.filter(
+    (item) => item.method === method && item.path === '/rest/v1/sections',
+  );
+}
 
 /** 只挑发往公告接口的请求，避免把登录请求也算进来 */
 function messageRequests(method) {
@@ -168,6 +183,40 @@ const server = http.createServer(async (request, response) => {
     return sendJson(response, 200, backend.messages);
   }
 
+  // ---- 栏目 ----
+  if (url.pathname === '/rest/v1/sections') {
+    const writing = request.method !== 'GET';
+
+    if (writing && backend.sectionWriteStatus) {
+      // 23505 = 重名，23503 = 外键限制（栏目里还有公告）
+      const code = backend.sectionWriteCode || '23505';
+      return sendJson(response, backend.sectionWriteStatus, {
+        message:
+          code === '23505'
+            ? 'duplicate key value violates unique constraint "sections_name_key"'
+            : 'update or delete on table "sections" violates foreign key constraint on table "messages"',
+        code,
+      });
+    }
+
+    if (writing) {
+      if (bearer !== STALE_TOKEN) {
+        return sendJson(response, 401, { message: '未登录或登录已过期' });
+      }
+      if (request.method === 'DELETE') return sendJson(response, 204, null);
+      if (request.method === 'POST') {
+        const created = { id: 'sec-new', name: body && body.name, created_at: '' };
+        backend.sections.push(created);
+        return sendJson(response, 201, [created]);
+      }
+      if (request.method === 'PATCH') {
+        const id = (url.searchParams.get('id') || '').replace(/^eq\./, '');
+        return sendJson(response, 200, [{ id, name: body && body.name, created_at: '' }]);
+      }
+    }
+    return sendJson(response, 200, backend.sections);
+  }
+
   return sendJson(response, 404, { message: 'not found' });
 });
 
@@ -182,6 +231,12 @@ function reset({ strictToken = false } = {}) {
   backend.strictToken = strictToken;
   backend.writeStatus = 0;
   backend.captchaFailure = false;
+  backend.sectionWriteStatus = 0;
+  backend.sectionWriteCode = '23505';
+  backend.sections = [
+    { id: 'sec-study', name: '学习委员通知', created_at: '2025-01-01T00:00:00+00:00' },
+    { id: 'sec-class', name: '班级事务', created_at: '2025-02-01T00:00:00+00:00' },
+  ];
   CONFIG.dataSource = 'supabase';
   CONFIG.supabase.url = base;
   CONFIG.supabase.anonKey = 'test-anon-key';
@@ -858,3 +913,151 @@ test('shouldUseCaptcha：localStorage 形式的 localhost 也算本地', async (
   CONFIG.supabase.url = 'http://localhost:8787';
   assert.equal(shouldUseCaptcha(), false);
 });
+
+/* ============================== 栏目 ============================== */
+
+test('listSections：GET /rest/v1/sections，按创建时间排序，字段被补全', async () => {
+  reset();
+  const sections = await createSupabaseSource().listSections();
+
+  assert.equal(sections.length, 2);
+  assert.deepEqual(sections[0], {
+    id: 'sec-study',
+    name: '学习委员通知',
+    created_at: '2025-01-01T00:00:00+00:00',
+  });
+
+  const request = sectionRequests('GET')[0];
+  assert.ok(request, '应该发出一次 GET /rest/v1/sections');
+  assert.match(request.path, /\/rest\/v1\/sections/);
+  assert.match(String(request.search || ''), /order=created_at/, '顺序由接口决定，前端不再排一遍');
+});
+
+test('listSections：缺 name 的脏数据给一个可读占位，不显示 undefined', async () => {
+  reset();
+  backend.sections = [{ id: 'sec-x', created_at: '' }];
+  const sections = await createSupabaseSource().listSections();
+  assert.equal(sections[0].name, '未命名栏目');
+});
+
+test('createSection：POST 带上 name 与 return=representation', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
+  const created = await source.createSection('班委通知');
+
+  assert.equal(created.name, '班委通知');
+  const request = sectionRequests('POST')[0];
+  assert.ok(request, '应该发出一次 POST /rest/v1/sections');
+  assert.equal(request.body.name, '班委通知');
+  assert.equal(request.headers.prefer, 'return=representation');
+  assert.ok(request.headers.apikey, '要带 apikey');
+});
+
+test('★ 未登录时新增栏目会被拒（同学不能改栏目）', async () => {
+  reset();
+  const source = createSupabaseSource();
+
+  await assert.rejects(
+    () => source.createSection('偷偷加的栏目'),
+    (error) => {
+      assert.ok(error instanceof DataError);
+      assert.equal(error.isAuthError, true, '应当是 401 登录态问题');
+      return true;
+    },
+  );
+});
+
+test('renameSection：PATCH 到 ?id=eq.，并且 id 被转义', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
+  const renamed = await source.renameSection('sec/weird id', '新名字');
+
+  assert.equal(renamed.name, '新名字');
+  const request = sectionRequests('PATCH')[0];
+  assert.ok(request, '应该发出一次 PATCH');
+  assert.match(String(request.search || ''), /id=eq\.sec%2Fweird%20id|id=eq\.sec\/weird/, 'id 要 URL 转义');
+});
+
+test('deleteSection：DELETE 到 ?id=eq.', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
+  await source.deleteSection('sec-class');
+
+  const request = sectionRequests('DELETE')[0];
+  assert.ok(request, '应该发出一次 DELETE');
+  assert.match(String(request.search || ''), /id=eq\.sec-class/);
+});
+
+test('★ 栏目重名（23505）给出中文提示，而不是原始数据库报错', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+  backend.sectionWriteStatus = 409;
+
+  await assert.rejects(
+    () => source.createSection('学习委员通知'),
+    (error) => {
+      assert.ok(error instanceof DataError);
+      assert.match(error.message, /已经有同名栏目/);
+      return true;
+    },
+  );
+});
+
+test('★ 栏目里还有公告时删除（23503）给出可操作的中文提示', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+  backend.sectionWriteStatus = 409;
+  backend.sectionWriteCode = '23503';
+
+  await assert.rejects(
+    () => source.deleteSection('sec-study'),
+    (error) => {
+      assert.ok(error instanceof DataError);
+      assert.match(error.message, /还有公告|不能删除/);
+      return true;
+    },
+  );
+});
+
+test('createMessage：把 section_id 一起发给接口', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
+  await source.createMessage({
+    title: '发到班级事务',
+    body: '正文',
+    section_id: 'sec-class',
+  });
+
+  const request = messageRequests('POST')[0];
+  assert.ok(request, '应该发出一次 POST');
+  assert.equal(request.body.section_id, 'sec-class');
+});
+
+test('createMessage：没传 section_id 时发 null（由后端决定落到默认栏目）', async () => {
+  reset();
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
+  await source.createMessage({ title: '没有栏目', body: '' });
+
+  const request = messageRequests('POST')[0];
+  assert.equal(request.body.section_id, null);
+});
+
+test('normalizeMessage：返回的公告一定带 section_id 字段（哪怕是空串）', async () => {
+  reset();
+  const messages = await createSupabaseSource().listMessages();
+  assert.equal(typeof messages[0].section_id, 'string');
+  assert.equal(messages[0].section_id, '');
+});
+

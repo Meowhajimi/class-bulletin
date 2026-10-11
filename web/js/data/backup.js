@@ -11,7 +11,7 @@
  */
 
 import { CONFIG, resolveSupabaseUrl } from '../config.js';
-import { isUrgentMessage } from './contract.js';
+import { isUrgentMessage, sectionOf } from './contract.js';
 import { buildDocxBlob, downloadBlob } from '../ui/docx.js';
 import { formatAbsolute, formatExpiryNote, isExpired, isPublished } from '../ui/time.js';
 
@@ -72,13 +72,17 @@ export function messagesToBlocks(messages, options = {}) {
     const pending = !isPublished(message, now);
     const status = expired ? '已过期' : pending ? '未到发布时间' : '有效';
     const urgent = isUrgentMessage(message);
+    // 栏目名：备份文档里也要能看出这条公告属于哪一栏
+    // （与 tools/backup-to-word.py 的输出必须一致，有测试盯着）
+    const section = sectionOf(message, options.sections || []);
+    const sectionName = section ? section.name : '未分类';
 
     blocks.push({
       text: `${index + 1}. ${urgent ? '【紧急】' : ''}${(message.title || '（无标题）').trim()}`,
       style: 'heading',
     });
     blocks.push({
-      text: `发布时间：${formatAbsolute(message.published_at) || '未知'}　状态：${status}` +
+      text: `栏目：${sectionName}　发布时间：${formatAbsolute(message.published_at) || '未知'}　状态：${status}` +
         (urgent ? '　标记：紧急' : ''),
       style: 'meta',
     });

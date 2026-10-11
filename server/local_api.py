@@ -120,6 +120,9 @@ class LocalAPI:
                 result = self._handle_rest(method, path, query, headers, body)
             else:
                 result = self._error(404, "Not found", "404")
+        except db.DuplicateError as exc:
+            # 唯一约束冲突 → 409，与 PostgREST 对 Postgres 23505 的行为一致
+            result = self._error(409, str(exc), "23505")
         except db.ValidationError as exc:
             result = self._error(400, str(exc), "400")
         except json.JSONDecodeError:
@@ -299,6 +302,10 @@ class LocalAPI:
         if "/rpc/" in path:
             return self._handle_rpc(method, path, body)
 
+        # 栏目：与真 Supabase 的 /rest/v1/sections 对应
+        if path.rstrip("/").endswith("/sections"):
+            return self._handle_sections(method, query, headers, body)
+
         # 目前只有 messages 一张表；加新表就在这里加一个分支
         if not path.rstrip("/").endswith("/messages"):
             return self._error(404, "Not found", "404")
@@ -346,6 +353,58 @@ class LocalAPI:
         # PostgREST 只在 Prefer: return=representation 时返回被写入的行；
         # 这里始终返回，前端拿到内容总比拿不到好。
         return {}
+
+    # ---------- /rest/v1/sections（栏目） ----------
+
+    def _handle_sections(
+        self,
+        method: str,
+        query: dict[str, list[str]],
+        headers: dict[str, str],
+        body: bytes,
+    ) -> tuple[int, Any, dict[str, str]]:
+        """栏目：同学只读，写操作必须带有效登录态（与 Supabase 的 RLS 一致）。"""
+        filters = self._filters(query)
+        section_id = filters.get("id")
+
+        if method == "GET":
+            if section_id:
+                row = db.get_section(self.conn, section_id)
+                return 200, ([row] if row else []), {}
+            return 200, db.list_sections(self.conn), {}
+
+        # 以下都是写操作
+        user_id = self._user_id(headers)
+        if not user_id:
+            return self._error(401, "未登录或登录已过期，请重新登录", "401")
+
+        if method == "POST":
+            payload = self._json(body) or {}
+            created = db.create_section(self.conn, payload.get("name"))
+            return 201, [created], self._representation_headers(headers)
+
+        if section_id is None:
+            return self._error(400, "缺少 id 参数", "400")
+
+        if method == "PATCH":
+            payload = self._json(body) or {}
+            if "name" not in payload:
+                return self._error(400, "没有要修改的字段", "400")
+            updated = db.rename_section(self.conn, section_id, payload.get("name"))
+            if updated is None:
+                return self._error(404, "没有这个栏目", "PGRST116")
+            return 200, [updated], self._representation_headers(headers)
+
+        if method == "DELETE":
+            # 返回字符串 = 不能删的原因（对应 Supabase 那边外键/约束造成的 409）
+            reason = db.delete_section(self.conn, section_id)
+            if reason == "没有这个栏目":
+                return self._error(404, reason, "PGRST116")
+            if reason:
+                return self._error(409, reason, "23503")
+            return 204, None, {}
+
+        return self._error(405, "Method not allowed", "405")
 
     # ---------- /rest/v1/rpc/...（对应 Supabase 的 RPC 函数） ----------
 

@@ -83,18 +83,24 @@ def collect_defined_columns(sql: str) -> dict[tuple[str, str], int]:
             defined[(current_table, column.group(1).lower())] = index
 
     # alter table ... add column if not exists（升级老表用）
-    for index, raw in enumerate(lines, start=1):
-        match = re.search(
-            r"alter\s+table\s+([\w.\"]+)\s+add\s+column\s+if\s+not\s+exists\s+\"?([\w]+)\"?",
-            raw,
-            re.IGNORECASE,
-        )
-        if not match:
-            continue
+    #
+    # ★ 按"整条语句"匹配，而不是逐行 —— 因为这条语句可以合法地写成两行：
+    #     alter table public.messages
+    #       add column if not exists section_id ...;
+    #   逐行匹配会漏掉它，于是下面那句 comment 被误报成"引用了没定义的列"，
+    #   或者更糟：真的把换行的写法放过、留下一个线上才炸的 bug。
+    #   （这个坑真的踩过：把 AI 生成的格式化 SQL 粘回文件里就会变成两行。）
+    for match in re.finditer(
+        r"alter\s+table\s+([\w.\"]+)\s+add\s+column\s+if\s+not\s+exists\s+\"?([\w]+)\"?",
+        sql,
+        re.IGNORECASE,
+    ):
+        # 用"这条语句开始处"的行号，避免多行写法把定义时间算晚
+        line_number = sql[: match.start()].count("\n") + 1
         table = strip_public(match.group(1))
         column = match.group(2).lower()
         existing = defined.get((table, column))
-        defined[(table, column)] = min(existing, index) if existing else index
+        defined[(table, column)] = min(existing, line_number) if existing else line_number
 
     return defined
 
@@ -200,6 +206,25 @@ comment on column public.messages.is_urgent is '先补列再注释，正确';
         str(find_ordering_problems(alter_then_comment)),
     )
 
+    # ★ 回归：alter 换行写成两句时也要认得出来（真的踩过这个坑）
+    wrapped_alter = """
+create table if not exists public.messages (
+  id uuid primary key
+);
+alter table public.messages
+  add column if not exists section_id uuid;
+comment on column public.messages.section_id is '换行写法也要认出来';
+"""
+    check(
+        "★ alter 换行写成两行也能识别（不误报）",
+        find_ordering_problems(wrapped_alter) == [],
+        str(find_ordering_problems(wrapped_alter)),
+    )
+    check(
+        "★ 换行写法确实被解析器读到了列",
+        ("messages", "section_id") in collect_defined_columns(wrapped_alter),
+    )
+
     print("\n二、检查真实的 supabase/schema.sql")
 
     problems = find_ordering_problems(sql)
@@ -225,6 +250,80 @@ comment on column public.messages.is_urgent is '先补列再注释，正确';
         "补列语句出现在它的 comment 之前（这正是之前出错的地方）",
         sql.lower().index("add column if not exists is_urgent")
         < sql.lower().index("comment on column public.messages.is_urgent"),
+    )
+
+    print("\n三、多栏目（sections）相关")
+
+    check(
+        "解析器读到了 section_id 列",
+        ("messages", "section_id") in defined,
+        str(sorted(defined.keys())),
+    )
+    check(
+        "解析器读到了 sections.name 列",
+        ("sections", "name") in defined,
+        str(sorted(defined.keys())),
+    )
+    check(
+        "sections 表建在 section_id 外键之前（否则报 relation does not exist）",
+        sql.lower().index("create table if not exists public.sections")
+        < sql.lower().index("add column if not exists section_id"),
+        "外键引用的表必须先存在",
+    )
+    check(
+        "section_id 的补列出现在它的 comment 之前",
+        sql.lower().index("add column if not exists section_id")
+        < sql.lower().index("comment on column public.messages.section_id"),
+    )
+    check(
+        "默认栏目在回填之前插入（回填要靠它拿到 id）",
+        sql.lower().index("insert into public.sections")
+        < sql.lower().index("update public.messages"),
+    )
+    check(
+        "栏目表也有 RLS 策略（否则同学可能拿到写权限）",
+        "enable row level security" in sql.lower()
+        and 'on public.sections' in sql.lower()
+        and "public read sections" in sql.lower(),
+    )
+    check(
+        "栏目名长度限制与 db.py / 前端的 40 一致",
+        bool(re.search(r"char_length\(btrim\(name\)\)\s+between\s+1\s+and\s+40", sql, re.IGNORECASE)),
+        "schema.sql 里没写 1~40",
+    )
+
+    print("\n四、栏目名长度三处必须一致（改一处就会让界面和后端说法不一）")
+
+    def read_source(relative: str) -> str:
+        path = os.path.join(BASE_DIR, *relative.split("/"))
+        if not os.path.isfile(path):
+            return ""
+        with open(path, "r", encoding="utf-8", errors="replace") as handle:
+            return handle.read()
+
+    db_source = read_source("server/db.py")
+    config_source = read_source("web/js/config.js")
+    admin_source = read_source("web/js/admin.js")
+
+    check(
+        "db.py 的 SECTION_NAME_MAX = 40",
+        bool(re.search(r"SECTION_NAME_MAX\s*=\s*40\b", db_source)),
+        "server/db.py 里找不到 SECTION_NAME_MAX = 40",
+    )
+    check(
+        "config.js 的 sections.nameMaxLength = 40",
+        bool(re.search(r"nameMaxLength:\s*40\b", config_source)),
+        "web/js/config.js 里找不到 nameMaxLength: 40",
+    )
+    check(
+        "管理页从 config 取上限（不写死数字）",
+        "CONFIG.sections.nameMaxLength" in admin_source,
+        "web/js/admin.js 里应由 config 提供上限",
+    )
+    check(
+        "默认栏目名两边一致（schema.sql 与 db.py）",
+        "学习委员通知" in sql and "学习委员通知" in db_source,
+        "默认栏目名漂移了：schema.sql 与 server/db.py 必须写同一个名字",
     )
 
     print("\n" + "=" * 46)

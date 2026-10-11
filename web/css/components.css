@@ -262,6 +262,12 @@
   font-size: var(--text-xs);
 }
 
+/* 需要站长动手的提示（例如"数据库还没建栏目表，去跑一次 schema.sql"） */
+.field__hint--warn {
+  color: var(--color-danger);
+  font-weight: 600;
+}
+
 /* 同一行里放输入框 + 小按钮（例如「发布时间」旁边的「现在」） */
 .field__row {
   display: flex;

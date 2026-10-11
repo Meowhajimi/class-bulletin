@@ -24,6 +24,8 @@ const { renderMessageCard, summarize } = await import('../../web/js/ui/message-c
 const states = await import('../../web/js/ui/states.js');
 const icons = await import('../../web/js/ui/icon.js');
 const { renderFilterBar } = await import('../../web/js/ui/filter-bar.js');
+const { AGGREGATE_SECTION_ID } = await import('../../web/js/ui/filter.js');
+const { renderSectionTabs } = await import('../../web/js/ui/section-tabs.js');
 const { askDialog } = await import('../../web/js/ui/dialog.js');
 const presence = await import('../../web/js/ui/presence.js');
 
@@ -87,6 +89,66 @@ test('消息卡片的各种形态渲染时没有警告', () => {
 test('筛选栏渲染时没有警告', () => {
   const { warnings } = renderAndCollectWarnings(() => renderFilterBar({ onChange: () => {} }));
   assert.deepEqual(warnings, [], '组件渲染不该产生警告');
+});
+
+test('★ 栏目标签行渲染时没有警告，且总栏目在最前', () => {
+  const sections = [
+    { id: 'sec-study', name: '学习委员通知' },
+    { id: 'sec-class', name: '班级事务' },
+  ];
+
+  const { warnings, result } = renderAndCollectWarnings(() =>
+    renderSectionTabs({
+      sections,
+      aggregateName: '总栏目',
+      activeId: AGGREGATE_SECTION_ID,
+      onSelect: () => {},
+    }),
+  );
+  assert.deepEqual(warnings, [], '组件渲染不该产生警告');
+
+  const { element, setActive, setCounts } = result;
+  // 用 text() 取"用户在页面上看到的文字"（文字挂在里面的 span 上）
+  const labels = element.children.map((child) => child.text());
+  assert.ok(labels[0].startsWith('总栏目'), `总栏目必须排第一，实际顺序 ${labels.join(' / ')}`);
+  assert.deepEqual(labels.slice(1), ['学习委员通知', '班级事务']);
+
+  // 计数：总栏目显示紧急总数，其它栏目各显示自己的
+  setCounts(new Map([['sec-study', 2], ['sec-class', 0]]), 2);
+  assert.deepEqual(warnings, [], '设置数字也不该产生警告');
+  assert.equal(element.children[0].text(), '总栏目2', '总栏目要显示紧急总数');
+  assert.equal(element.children[1].text(), '学习委员通知2');
+  assert.equal(element.children[2].text(), '班级事务', '0 条时不显示数字');
+
+  // 选中态
+  setActive('sec-class');
+  assert.equal(element.children[1].getAttribute('aria-selected'), 'false');
+  assert.equal(element.children[2].getAttribute('aria-selected'), 'true');
+  assert.equal(element.children[2].classList.contains('section-tabs__tab--active'), true);
+});
+
+test('栏目标签行：没有栏目（数据库还没建表）时只剩总栏目，不崩', () => {
+  const { warnings, result } = renderAndCollectWarnings(() =>
+    renderSectionTabs({ sections: [], activeId: AGGREGATE_SECTION_ID, onSelect: () => {} }),
+  );
+  assert.deepEqual(warnings, [], '组件渲染不该产生警告');
+  assert.equal(result.element.children.length, 1);
+});
+
+test('栏目标签行：点击回调带上正确的 id', () => {
+  const clicked = [];
+  const { result } = renderAndCollectWarnings(() =>
+    renderSectionTabs({
+      sections: [{ id: 'sec-study', name: '学习委员通知' }],
+      activeId: AGGREGATE_SECTION_ID,
+      onSelect: (id) => clicked.push(id),
+    }),
+  );
+
+  // 假 DOM 里事件通过 listeners + dispatch 触发
+  result.element.children[0].dispatch('click', {});
+  result.element.children[1].dispatch('click', {});
+  assert.deepEqual(clicked, [AGGREGATE_SECTION_ID, 'sec-study']);
 });
 
 test('所有图标渲染时没有警告，且都带 aria-hidden（读屏软件不用念装饰图）', () => {
