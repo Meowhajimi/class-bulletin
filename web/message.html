@@ -7,6 +7,15 @@
   <meta name="description" content="班级公告详情。" />
   <meta name="theme-color" content="#2563eb" />
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+
+  <!-- 分享卡片：爬虫不执行 JS，所以必须写在源码里（og:url 由打包脚本注入） -->
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="班级公告栏" />
+  <meta property="og:title" content="班级公告栏 · 公告详情" />
+  <meta property="og:description" content="查看这条公告的完整内容。" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta name="format-detection" content="telephone=no" />
+
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />

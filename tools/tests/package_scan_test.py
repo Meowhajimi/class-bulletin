@@ -30,6 +30,7 @@ _spec.loader.exec_module(_package_web)
 
 jwt_role = _package_web.jwt_role
 read_config_values = _package_web.read_config_values
+read_site_url = _package_web.read_site_url
 scan_text = _package_web.scan_text
 
 if not sys.stdout.isatty():
@@ -74,6 +75,10 @@ def main() -> int:
     check("注释里的 service_role 字样不算问题", not any("service_role" in p for p in problems), str(problems))
     check("填了可发布 key 时不报警", problems == [], str(problems))
 
+    # 注意：取值解析只认 supabase 块里的 url —— 因为 config 里还有 site.url。
+    # 所以下面这些"待解析"的片段必须带上 supabase 外层（真实 config 就是这样）。
+    wrapped = "supabase: {\n" + comment_only + "},"
+
     problems, _ = scan_text("// 说明文字：服务端才会用到 service_role\nconst x = 1;", "app.js")
     check("普通代码注释提到 service_role 不算问题", problems == [], str(problems))
 
@@ -93,14 +98,29 @@ def main() -> int:
 
     print("\n三、config.js 取值解析（只看赋值，不看注释）")
 
-    url, key = read_config_values(comment_only)
+    url, key = read_config_values(wrapped)
     check("解析出 url", url == "", f"实际 {url!r}")
     check("解析出 anonKey", key.startswith("sb_publishable_"), f"实际 {key!r}")
 
     url2, key2 = read_config_values(
-        "    url: 'https://demo.supabase.co',\n    anonKey: 'sb_publishable_xyz',"
+        "supabase: {\n    url: 'https://demo.supabase.co',\n    anonKey: 'sb_publishable_xyz',\n},"
     )
     check("带缩进的赋值也能解析", url2 == "https://demo.supabase.co" and key2 == "sb_publishable_xyz", f"{url2} / {key2}")
+
+    # ★ 回归：site.url 排在 supabase.url 前面时，绝不能取错
+    both = (
+        "export const CONFIG = {\n"
+        "  site: { url: 'https://class-bulletin.pages.dev/' },\n"
+        "  supabase: { url: 'https://demo.supabase.co', anonKey: 'sb_publishable_xyz' },\n"
+        "};"
+    )
+    url3, key3 = read_config_values(both)
+    check(
+        "★ 有两个 url 字段时取的是 supabase 那个（曾静默取错）",
+        url3 == "https://demo.supabase.co",
+        f"实际取到：{url3}",
+    )
+    check("同一个 config 里 site.url 也能单独取到", read_site_url(both) == "https://class-bulletin.pages.dev/")
 
     print("\n四、JWT 解析")
 

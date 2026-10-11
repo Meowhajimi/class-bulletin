@@ -7,6 +7,22 @@
   <meta name="description" content="班级公告栏：查看班级通知与作业提醒。" />
   <meta name="theme-color" content="#2563eb" />
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml" />
+
+  <!--
+    分享卡片（微信 / QQ / 其它社交平台）。
+
+    为什么必须写在 HTML 源码里：这些平台的爬虫**不执行 JavaScript**，
+    用 JS 填的标签它们读不到 —— 那样分享到群里就只有光秃秃一个网址。
+    og:url 与 canonical 由 tools/package-web.py 在打包时按 config 注入。
+  -->
+  <meta property="og:type" content="website" />
+  <meta property="og:site_name" content="班级公告栏" />
+  <meta property="og:title" content="班级公告栏" />
+  <meta property="og:description" content="班级通知与作业提醒，同学只读浏览。" />
+  <meta property="og:locale" content="zh_CN" />
+  <meta name="format-detection" content="telephone=no" />
+  <link rel="canonical" href="./" />
+
   <link rel="stylesheet" href="css/tokens.css" />
   <link rel="stylesheet" href="css/base.css" />
   <link rel="stylesheet" href="css/layout.css" />

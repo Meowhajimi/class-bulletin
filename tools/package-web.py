@@ -80,14 +80,51 @@ def scan_text(text: str, filename: str) -> tuple[list[str], list[str]]:
     return sorted(set(problems)), sorted(set(warnings))
 
 
+def object_block(config_text: str, key: str) -> str:
+    """截出 `key: { ... }` 这一段（按花括号配平，能处理嵌套）。
+
+    ★ 为什么需要：config 里不止一个 `url:` 字段
+      （`site.url` 是站点地址、`supabase.url` 是接口地址）。
+      不限定范围的话，正则会把**先出现的那个**当成接口地址 ——
+      这个 bug 真的发生过：`[配置] 接口地址` 打出来是站点地址，
+      而且**没有任何报错**。宁可比对麻烦一点，也不要静默取错。
+    """
+    match = re.search(r"^\s*" + re.escape(key) + r":\s*\{", config_text, re.MULTILINE)
+    if not match:
+        return ""
+    start = match.end() - 1
+    depth = 0
+    for index in range(start, len(config_text)):
+        char = config_text[index]
+        if char == "{":
+            depth += 1
+        elif char == "}":
+            depth -= 1
+            if depth == 0:
+                return config_text[start : index + 1]
+    return config_text[start:]
+
+
 def read_config_values(config_text: str) -> tuple[str, str]:
-    """从 config.js 里取出 url 与 anonKey 的实际取值（只看赋值，不看注释）。"""
-    url_match = re.search(r"^\s*url:\s*'([^']*)'", config_text, re.MULTILINE)
-    key_match = re.search(r"^\s*anonKey:\s*'([^']*)'", config_text, re.MULTILINE)
+    """从 config.js 里取出**接口**的 url 与 anonKey（只在 supabase 块里找）。
+
+    取值正则允许 `url:` 出现在行首，也允许写成单行对象
+    （`supabase: { url: '...' }`）—— 用户可能重新排版，不该因此解析失败。
+    """
+    block = object_block(config_text, "supabase")
+    url_match = re.search(r"(?:^|[\s{,])url:\s*'([^']*)'", block, re.MULTILINE)
+    key_match = re.search(r"(?:^|[\s{,])anonKey:\s*'([^']*)'", block, re.MULTILINE)
     return (
         url_match.group(1).strip() if url_match else "",
         key_match.group(1).strip() if key_match else "",
     )
+
+
+def read_site_url(config_text: str) -> str:
+    """取出**站点**的公开地址（site.url），用于分享卡片与 canonical。"""
+    block = object_block(config_text, "site")
+    url_match = re.search(r"(?:^|[\s{,])url:\s*'([^']+)'", block, re.MULTILINE)
+    return url_match.group(1).strip() if url_match else ""
 
 
 def inject_preconnect(html_path: str, api_url: str) -> bool:
@@ -116,6 +153,57 @@ def inject_preconnect(html_path: str, api_url: str) -> bool:
     )
     with open(html_path, "w", encoding="utf-8") as handle:
         handle.write(html.replace(marker, hint + marker, 1))
+    return True
+
+
+def inject_share_url(html_path: str, site_url: str, path: str) -> bool:
+    """把 og:url 与 canonical 的绝对地址注入到 HTML 里。
+
+    为什么必须打包时注入、而且必须写进源码（不能用 JS 填）：
+        微信 / QQ 的爬虫**不执行 JavaScript**。分享到群里时，
+        它们只读 HTML 源码里的这些标签。用 JS 填的话，
+        分享出去就只有光秃秃一个网址。
+
+    为什么不在 web/ 源码里写死：
+        那样换域名就要改多个文件。本项目规矩是"地址只在 config.js 一处"。
+    """
+    if not os.path.isfile(html_path):
+        return False
+
+    with open(html_path, "r", encoding="utf-8") as handle:
+        html = handle.read()
+
+    if 'property="og:url"' in html:
+        return False
+
+    absolute = site_url.rstrip("/") + "/" + path.lstrip("/")
+    marker = '  <meta property="og:locale" content="zh_CN" />'
+    if marker not in html:
+        return False
+
+    tags = (
+        f'{marker}\n'
+        f'  <meta property="og:url" content="{absolute}" />\n'
+    )
+    html = html.replace(marker, tags, 1)
+
+    # 同时把 canonical 换成绝对地址（没写 canonical 的页面就补一条）
+    if 'rel="canonical"' in html:
+        html = re.sub(
+            r'<link rel="canonical" href="[^"]*" />',
+            f'<link rel="canonical" href="{absolute}" />',
+            html,
+            count=1,
+        )
+    else:
+        html = html.replace(
+            '  <meta name="theme-color"',
+            f'  <link rel="canonical" href="{absolute}" />\n  <meta name="theme-color"',
+            1,
+        )
+
+    with open(html_path, "w", encoding="utf-8") as handle:
+        handle.write(html)
     return True
 
 
@@ -167,6 +255,15 @@ def main() -> int:
         api_path = match.group(1).strip() if match else ""
         if api_path:
             print(f"[配置] 接口走同源代理：{api_path}/*（浏览器不再直连 Supabase）")
+
+        # 站点公开地址：用于分享卡片的 og:url 与 canonical
+        site_url = read_site_url(config_text)
+        if site_url:
+            print(f"[配置] 站点地址：{site_url}")
+        else:
+            warnings.append(
+                "config.js 里的 site.url 是空的 —— 分享到微信/QQ 时卡片里的链接会不完整"
+            )
 
         if url:
             print(f"[配置] 接口地址：{url}")
@@ -227,6 +324,18 @@ def main() -> int:
             print(f"[优化] 已在 {'、'.join(optimized)} 里插入 preconnect（提前连接接口服务器）")
     elif api_path:
         print("[优化] 已跳过 preconnect（走同源代理，不需要提前连 Supabase）")
+
+    # ---- 4b. 注入分享卡片的绝对地址（og:url / canonical）----
+    # 微信、QQ 的爬虫不执行 JS，所以这些标签必须在 HTML 源码里；
+    # 但地址不写死在 web/ 源码里 —— 打包时按 config.js 的 site.url 注入。
+    if site_url:
+        injected = [
+            name
+            for name, path in (("index.html", ""), ("message.html", "message.html"))
+            if inject_share_url(os.path.join(DIST_DIR, name), site_url, path)
+        ]
+        if injected:
+            print(f"[优化] 已在 {'、'.join(injected)} 里注入 og:url / canonical（分享卡片用）")
 
     # ---- 5. 再打一个 zip：上传框可以直接丢 zip，比拖文件夹更不容易出错 ----
     if os.path.isfile(ZIP_PATH):
