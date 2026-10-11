@@ -37,6 +37,7 @@ const dom = {
   footer: qs('#footer-note'),
   online: qs('#online-count'),
   downloadBackup: qs('#download-backup'),
+  repo: qs('#repo-link'),
   urgentFlag: qs('#urgent-flag'),
   toasts: qs('#toasts'),
 };
@@ -64,6 +65,15 @@ function applySiteChrome() {
 
   dom.footer.textContent = CONFIG.site.footer || '';
   dom.footer.hidden = !CONFIG.site.footer;
+
+  // 源码仓库链接：地址只在 config.js 里配，留空就整条不显示
+  const repoUrl = (CONFIG.site.repoUrl || '').trim();
+  if (dom.repo && repoUrl) {
+    dom.repo.href = repoUrl;
+    dom.repo.hidden = false;
+  } else if (dom.repo) {
+    dom.repo.hidden = true;
+  }
 }
 
 function setStatus(text) {

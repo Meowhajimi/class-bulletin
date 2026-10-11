@@ -26,6 +26,7 @@ const dom = {
   status: qs('#status-line'),
   main: qs('#main'),
   toasts: qs('#toasts'),
+  repo: qs('#repo-link'),
 };
 
 function applySiteChrome() {
@@ -35,6 +36,15 @@ function applySiteChrome() {
     dom.subtitle.hidden = false;
   } else {
     dom.subtitle.hidden = true;
+  }
+
+  // 源码仓库链接：地址只在 config.js 里配，留空就整条不显示
+  const repoUrl = (CONFIG.site.repoUrl || '').trim();
+  if (dom.repo && repoUrl) {
+    dom.repo.href = repoUrl;
+    dom.repo.hidden = false;
+  } else if (dom.repo) {
+    dom.repo.hidden = true;
   }
 }
 

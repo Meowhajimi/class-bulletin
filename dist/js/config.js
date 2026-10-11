@@ -11,6 +11,15 @@ export const CONFIG = {
     title: '班级公告栏',
     className: '', // 例如 '2024 级计算机 1 班'；留空则不显示第二行
     footer: '', // 例如 '由学习委员维护'；留空则不显示
+
+    /**
+     * 源码仓库地址（页脚左下角会显示一个「源码」链接）。
+     *
+     * 留空 = 不显示这个链接。想换成别的仓库/别的地址，只改这里。
+     * 放在 config 里而不是写死在 HTML 里，是为了遵守本项目的规矩：
+     * 换地址、换名字都只改这一个文件。
+     */
+    repoUrl: 'https://github.com/Meowhajimi/class-bulletin',
   },
 
   /**

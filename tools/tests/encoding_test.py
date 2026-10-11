@@ -156,8 +156,39 @@ def main() -> int:
         print("\n     修法：python tools/check_encoding.py --fix")
         print("     修不好就从 git 恢复：git show HEAD:文件名 > 文件名")
 
-    print("\n四、真造一个坏文件，端到端验证检测能抓到")
+    print("\n三之二、★ 所有 .bat 必须是 CRLF 换行 + 无 BOM")
 
+    # 为什么单列一条：cmd.exe 遇到 LF 换行会**把行拆错**
+    # （`echo.` 被当成命令 `ho`，整个脚本就废了）。
+    # 这个坑真的发生过 —— 用脚本批量改计数时，写出时把 CRLF 变成了 LF。
+    bat_files = [
+        name for name in sorted(os.listdir(BASE_DIR)) if name.lower().endswith(".bat")
+    ]
+    check("项目里有 .bat 文件", len(bat_files) > 0, f"找到 {len(bat_files)} 个")
+
+    bad_endings: list[str] = []
+    bad_bom: list[str] = []
+    for name in bat_files:
+        with open(os.path.join(BASE_DIR, name), "rb") as handle:
+            raw = handle.read()
+        lf_only = raw.count(b"\n") - raw.count(b"\r\n")
+        if lf_only:
+            bad_endings.append(f"{name}（{lf_only} 行只有 LF）")
+        if raw[:3] == b"\xef\xbb\xbf":
+            bad_bom.append(name)
+
+    check(
+        "全部用 CRLF 换行（LF 会让 cmd 拆错行）",
+        not bad_endings,
+        "、".join(bad_endings),
+    )
+    check("全部没有 UTF-8 BOM", not bad_bom, "、".join(bad_bom))
+    if bad_endings or bad_bom:
+        print("\n     修法（Python，newline='' 读写才不做换行翻译）：")
+        print("       io.open(p, encoding='utf-8', newline='').read()")
+        print("       → 把 \\r\\n 统一成 \\n 再换成 \\r\\n → 用 newline='' 写回")
+
+    print("\n四、真造一个坏文件，端到端验证检测能抓到")
     with tempfile.TemporaryDirectory() as temp_dir:
         target = os.path.join(temp_dir, "broken.md")
         with open(target, "w", encoding="utf-8") as handle:
