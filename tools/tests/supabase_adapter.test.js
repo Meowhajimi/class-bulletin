@@ -653,21 +653,20 @@ test('★ 写入遇到 404（代理不存在）也退回直连 —— 请求根�
 
 test('★ 写入遇到网络错误绝不换地址重试（可能已经发布成功，重试就会重复）', async () => {
   reset();
+  // ★ 先"不在 Pages 上"登录（直连测试服务器），再假装在 Pages 上。
+  //   否则登录会真的去访问线上 pages.dev —— 那会让测试依赖线上状态，
+  //   代理上线前后结果不同（这个坑真的踩过一次）。
+  const source = createSupabaseSource();
+  await source.signIn('admin@test.local', 'right-password');
+
   pretendOnPages();
   const realFetch = globalThis.fetch;
   const seen = [];
-  let phase = 'login';
-  globalThis.fetch = async (url, init) => {
+  globalThis.fetch = async (url) => {
     seen.push(String(url));
-    // 登录阶段让它走通（用真服务器），发布阶段一律断网
-    if (phase === 'login') return realFetch(url, init);
     throw new TypeError('fetch failed');
   };
-  const source = createSupabaseSource();
   try {
-    await source.signIn('admin@test.local', 'right-password');
-    phase = 'publish';
-    seen.length = 0;
     await assert.rejects(() => source.createMessage({ title: '网络错误时发布', body: '' }));
     const writeAttempts = seen.filter((url) => url.includes('/rest/v1/messages')).length;
     assert.equal(
