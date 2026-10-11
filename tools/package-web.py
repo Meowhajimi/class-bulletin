@@ -198,7 +198,14 @@ def inject_share_url(html_path: str, site_url: str, path: str) -> bool:
         + "\n"
         + f'{indent}<meta property="og:image:height" content="512" />'
         + "\n"
-        + f'{indent}<meta property="og:image:alt" content="班级公告栏" />',
+        + f'{indent}<meta property="og:image:alt" content="班级公告栏" />'
+        # 下面两个是"老标准"，微信/QQ 等国内平台历史上会读它们取缩略图。
+        # 成本几乎为零，多写一份没有坏处 —— 实测微信已经能显示缩略图，
+        # QQ 比较保守，所以多给它几个能认的入口。
+        + "\n"
+        + f'{indent}<link rel="image_src" href="{site_url.rstrip("/")}/assets/share.png" />'
+        + "\n"
+        + f'{indent}<meta itemprop="image" content="{site_url.rstrip("/")}/assets/share.png" />',
         1,
     )
 
