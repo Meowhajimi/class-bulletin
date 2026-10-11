@@ -169,6 +169,36 @@ def main() -> int:
         check("顺手补上了 canonical", 'rel="canonical" href="https://example.com/"' in out)
         check("重复调用不会注入两次", package_web.inject_share_url(target, "https://example.com/", "") is False)
 
+    print("\n九、分享缩略图（微信/QQ 看重图片，且不支持 SVG）")
+    png_path = os.path.join(BASE_DIR, "web", "assets", "share.png")
+    check("web/assets/share.png 存在", os.path.isfile(png_path), "缩略图没生成")
+    if os.path.isfile(png_path):
+        with open(png_path, "rb") as handle:
+            raw = handle.read()
+        check("是真正的 PNG（签名正确）", raw[:8] == b"\x89PNG\r\n\x1a\n")
+        check("不是空文件", len(raw) > 500, f"{len(raw)} 字节")
+        # IHDR 里的宽高：偏移 16 起，各 4 字节大端
+        width = int.from_bytes(raw[16:20], "big")
+        height = int.from_bytes(raw[20:24], "big")
+        check("尺寸够微信当缩略图（≥300×300）", width >= 300 and height >= 300, f"{width}×{height}")
+        check("是方图（卡片缩略图更稳）", width == height, f"{width}×{height}")
+    check(
+        "生成脚本还在（以后想换图能重新生成）",
+        os.path.isfile(os.path.join(BASE_DIR, "tools", "make-share-image.py")),
+    )
+
+    print("\n十、注入的标签里要带上 og:image")
+    with tempfile.TemporaryDirectory() as temp_dir:
+        target = os.path.join(temp_dir, "index.html")
+        with open(target, "w", encoding="utf-8") as handle:
+            handle.write('<meta property="og:locale" content="zh_CN" />')
+        package_web.inject_share_url(target, "https://example.com/", "")
+        with open(target, "r", encoding="utf-8") as handle:
+            out = handle.read()
+        check("注入后有 og:image（绝对地址）",
+              'property="og:image" content="https://example.com/assets/share.png"' in out)
+        check("带 og:image:width/height", "og:image:width" in out and "og:image:height" in out)
+
     print("\n" + "=" * 52)
     print(f"通过 {passed} 项，失败 {failed} 项")
     print("=" * 52)

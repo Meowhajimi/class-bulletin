@@ -177,15 +177,30 @@ def inject_share_url(html_path: str, site_url: str, path: str) -> bool:
         return False
 
     absolute = site_url.rstrip("/") + "/" + path.lstrip("/")
-    marker = '  <meta property="og:locale" content="zh_CN" />'
-    if marker not in html:
+    # 用正则找 og:locale，并且**沿用它的缩进** ——
+    # 不写死"两个空格"，否则谁把 HTML 重新排版一下，注入就静默失效。
+    meta = re.search(r'^([ \t]*)<meta property="og:locale"[^>]*>', html, re.MULTILINE)
+    if not meta:
         return False
+    indent = meta.group(1)
 
-    tags = (
-        f'{marker}\n'
-        f'  <meta property="og:url" content="{absolute}" />\n'
+    html = html.replace(
+        meta.group(0),
+        meta.group(0)
+        + "\n"
+        + f'{indent}<meta property="og:url" content="{absolute}" />'
+        # 缩略图：微信/QQ 生成卡片时很看重图片，而它们对 SVG 支持不好，
+        # 所以用 web/assets/share.png（由 tools/make-share-image.py 生成）
+        + "\n"
+        + f'{indent}<meta property="og:image" content="{site_url.rstrip("/")}/assets/share.png" />'
+        + "\n"
+        + f'{indent}<meta property="og:image:width" content="512" />'
+        + "\n"
+        + f'{indent}<meta property="og:image:height" content="512" />'
+        + "\n"
+        + f'{indent}<meta property="og:image:alt" content="班级公告栏" />',
+        1,
     )
-    html = html.replace(marker, tags, 1)
 
     # 同时把 canonical 换成绝对地址（没写 canonical 的页面就补一条）
     if 'rel="canonical"' in html:
