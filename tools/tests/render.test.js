@@ -27,6 +27,11 @@ const icons = await import('../../web/js/ui/icon.js');
 const { renderFilterBar } = await import('../../web/js/ui/filter-bar.js');
 const { AGGREGATE_SECTION_ID } = await import('../../web/js/ui/filter.js');
 const { renderSectionTabs } = await import('../../web/js/ui/section-tabs.js');
+const {
+  isAggregateShowAll,
+  renderAggregateToggle,
+  setAggregateShowAll,
+} = await import('../../web/js/ui/aggregate-toggle.js');
 const { askDialog, askChoiceDialog, askTextDialog } = await import('../../web/js/ui/dialog.js');
 const presence = await import('../../web/js/ui/presence.js');
 
@@ -521,6 +526,55 @@ test('输入对话框：用完从页面移除，且长度上限来自参数', as
     !globalThis.document.body.childNodes.includes(dialog),
     '对话框应当被移除，不能一直留在页面上',
   );
+});
+
+/* ============ 总栏目的「也显示普通公告」开关 ============ */
+
+test('★ 总栏目开关：渲染无警告，初始状态跟着传进来的值', () => {
+  const { warnings, result } = renderAndCollectWarnings(() =>
+    renderAggregateToggle({ checked: false, onChange: () => {} }),
+  );
+  assert.deepEqual(warnings, [], '开关渲染不该产生警告');
+  assert.equal(result.input.checked, false);
+
+  const on = renderAndCollectWarnings(() =>
+    renderAggregateToggle({ checked: true, onChange: () => {} }),
+  );
+  assert.equal(on.result.input.checked, true, '传 true 时应当是勾上的');
+});
+
+test('★ 总栏目开关：勾上/取消都会把新状态回调出去', () => {
+  const seen = [];
+  const { result } = renderAndCollectWarnings(() =>
+    renderAggregateToggle({ checked: false, onChange: (value) => seen.push(value) }),
+  );
+
+  result.input.checked = true;
+  result.input.dispatch('change', {});
+  result.input.checked = false;
+  result.input.dispatch('change', {});
+  result.input.checked = true;
+  result.input.dispatch('change', {});
+
+  assert.deepEqual(seen, [true, false, true]);
+});
+
+test('★ 总栏目开关：选择记在本机，读的时候能读回来', () => {
+  localStorage.clear();
+  assert.equal(isAggregateShowAll(), false, '默认是关的（总栏目 = 紧急汇总）');
+
+  setAggregateShowAll(true);
+  assert.equal(isAggregateShowAll(), true, '勾过之后要记得');
+
+  setAggregateShowAll(false);
+  assert.equal(isAggregateShowAll(), false, '取消后也要记得');
+});
+
+test('总栏目开关：文案里带"普通公告"四个字（同学才知道这是干什么的）', () => {
+  const { result } = renderAndCollectWarnings(() =>
+    renderAggregateToggle({ checked: false, onChange: () => {} }),
+  );
+  assert.match(result.element.text(), /普通公告/);
 });
 
 /* ============================ 在线人数 ============================ */

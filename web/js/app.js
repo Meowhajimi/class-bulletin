@@ -15,6 +15,7 @@ import { getDataSource } from './data/index.js';
 import { clear, el, qs, toast } from './ui/dom.js';
 import {
   AGGREGATE_SECTION_ID,
+  aggregateMessages,
   filterMessages,
   hasActiveFilter,
   messagesOfSection,
@@ -23,6 +24,11 @@ import {
   splitUrgentFirst,
 } from './ui/filter.js';
 import { renderFilterBar } from './ui/filter-bar.js';
+import {
+  isAggregateShowAll,
+  renderAggregateToggle,
+  setAggregateShowAll,
+} from './ui/aggregate-toggle.js';
 import { renderMessageCard } from './ui/message-card.js';
 import { startPresence } from './ui/presence.js';
 import { resetSectionTabs } from './ui/section-tabs.js';
@@ -68,6 +74,12 @@ const FALLBACK_SECTION_ID = '__fallback__';
 
 /** 标签行控制器 */
 let sectionTabs = /** @type {null|{element: HTMLElement, setActive: Function, setCounts: Function}} */ (null);
+
+/**
+ * 总栏目里要不要连普通公告一起列出来。
+ * 默认关闭（总栏目 = 紧急汇总）；同学勾上后记在他自己的浏览器里。
+ */
+let aggregateShowAll = isAggregateShowAll();
 
 /** 当前的筛选条件 */
 const filters = { keyword: '', from: /** @type {number|null} */ (null), to: /** @type {number|null} */ (null) };
@@ -138,7 +150,14 @@ function render() {
   renderTabs();
 
   const active = hasActiveFilter(filters);
-  const inTab = messagesOfSection(cache.all, activeSectionId, cache.sections);
+
+  // 总栏目：按同学的开关决定"只有紧急"还是"紧急 + 普通"
+  // 普通栏目：本栏目的全部公告（界面再分紧急/普通）
+  const inTab =
+    activeSectionId === AGGREGATE_SECTION_ID
+      ? aggregateMessages(cache.all, { includeNormal: aggregateShowAll })
+      : messagesOfSection(cache.all, activeSectionId, cache.sections);
+
   const matched = sortMessages(filterMessages(inTab, filters));
 
   if (filterBar) {
@@ -209,34 +228,83 @@ function initialSectionId() {
 
 /**
  * 总栏目：把**所有栏目**的紧急公告汇总在一起。
+ *
+ * 如果同学勾了「也显示普通公告」，下面再补一段普通公告
+ * （紧急永远在上面，不会被普通公告挤下去）。
  * 每条卡片带一个所属栏目的小徽章，点进去还是那条公告自己的详情页。
  */
 function renderAggregate(messages, now) {
   const urgent = sortMessages(messages.filter(isUrgentMessage));
+  const normal = aggregateShowAll
+    ? sortMessages(messages.filter((message) => !isUrgentMessage(message)))
+    : [];
 
-  if (!urgent.length) {
+  // 开关始终显示（否则关掉之后就没入口再打开了）
+  dom.main.append(
+    renderAggregateToggle({
+      checked: aggregateShowAll,
+      onChange: (checked) => {
+        aggregateShowAll = checked;
+        setAggregateShowAll(checked);
+        render();
+      },
+    }).element,
+  );
+
+  if (!urgent.length && !normal.length) {
     dom.main.append(
-      emptyState('现在没有紧急公告', CONFIG.sections.aggregateHint || '各栏目的紧急公告都会汇总到这里。'),
+      emptyState(
+        '现在没有紧急公告',
+        aggregateShowAll
+          ? '各栏目的公告都会汇总到这里。'
+          : (CONFIG.sections.aggregateHint || '各栏目的紧急公告都会汇总到这里。') +
+              '想连普通公告一起看，勾选上面的「也显示普通公告」。',
+      ),
     );
     return;
   }
 
-  dom.main.append(
-    el(
-      'section',
-      { class: 'section' },
-      el('h2', { class: 'section__title', text: `全部紧急 · ${urgent.length} 条` }),
+  if (urgent.length) {
+    dom.main.append(
       el(
-        'div',
-        { class: 'list' },
-        ...urgent.map((message) =>
-          card(message, now, {
-            extraBadges: sectionBadges(message),
-          }),
+        'section',
+        { class: 'section section--urgent' },
+        el('h2', { class: 'section__title', text: `全部紧急 · ${urgent.length} 条` }),
+        el(
+          'div',
+          { class: 'list' },
+          ...urgent.map((message) =>
+            card(message, now, {
+              extraBadges: sectionBadges(message),
+            }),
+          ),
         ),
       ),
-    ),
-  );
+    );
+  } else {
+    dom.main.append(
+      emptyState('现在没有紧急公告', '普通公告在下面。'),
+    );
+  }
+
+  if (normal.length) {
+    dom.main.append(
+      el(
+        'section',
+        { class: 'section' },
+        el('h2', { class: 'section__title', text: `普通公告 · ${normal.length} 条` }),
+        el(
+          'div',
+          { class: 'list' },
+          ...normal.map((message) =>
+            card(message, now, {
+              extraBadges: sectionBadges(message),
+            }),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /** 某条公告所属栏目的徽章（总栏目和详情页用；普通栏目内不必重复显示） */

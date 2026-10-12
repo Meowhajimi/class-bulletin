@@ -22,7 +22,7 @@
 | **`发布到Cloudflare.bat`** | ★ 更新**主站**（Cloudflare Pages）—— 会跑一次打包并打开控制台 |
 | **`备份公告到Word.bat`** | 把云端全部公告导出成 Word，存到 `backups\` |
 | **`云端自检.bat`** | 检查线上是否正常：能读公告 / 注册已关 / 同学不能发布 |
-| **`跑测试.bat`** | 改完代码跑一遍全部测试（12 个套件，**624 项**） |
+| **`跑测试.bat`** | 改完代码跑一遍全部测试（12 个套件，**633 项**） |
 | **`公开前体检.bat`** | 想把源码公开给同学之前跑一遍：查机密 key / 本机专用文件 / 个人信息 / 乱码 |
 | **`推送到GitHub.bat`** | 改完网页后一键更新主站（打包 → 提交 → 推送，Cloudflare 自动部署） |
 
@@ -149,11 +149,12 @@ learn web\
 │        ├─ filter.js       ★排序/筛选/搜索 + 栏目归属与总栏目汇总（纯函数，有单元测试）
 │        ├─ filter-bar.js   首页的搜索与筛选栏
 │        ├─ section-tabs.js 顶部的栏目标签行（总栏目 + 各栏目）
+│        ├─ aggregate-toggle.js 总栏目上方的「也显示普通公告」开关（记在本机）
 │        ├─ section-move.js ★删栏目之前"把公告搬到别的栏目"（纯逻辑，有单元测试）
 │        ├─ message-card.js ★消息卡片模板（紧急徽章、摘要、详情链接）
 │        ├─ icon.js         极简 SVG 图标（用 createElementNS，不引入图标库）
 │        ├─ docx.js         零依赖生成 Word 文件
-│        ├─ dialog.js       模态询问框 + 输入框（栏目改名用）
+│        ├─ dialog.js       模态对话框：询问 / 输入文字 / 选择一项
 │        └─ states.js       加载中 / 空 / 出错 / 未配置（都带图标）
 │
 ├─ supabase\
@@ -495,7 +496,7 @@ import { createMyApiSource } from './myapi.js';
 ## 七、测试与自检
 
 ```bat
-:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（206 项）
+:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（215 项）
 "C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"
 
 :: 后端接口端到端 + 老库迁移 + 栏目增删改（99 项）
@@ -519,7 +520,7 @@ python tools/tests/theme_test.py
 "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
 ```
 
-> 合计 **624 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
+> 合计 **633 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
 
 node 不在 PATH 时用完整路径：
 `"C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"`
@@ -528,7 +529,7 @@ node 不在 PATH 时用完整路径：
 |---|---|
 | `tools/tests/time.test.js` | 过期判定、定时发布、时间显示格式、**发布时间校验**（过去的/未来的/乱填的） |
 | `tools/tests/filter.test.js` | 搜索关键词、日期范围筛选（**含边界当天**）、**紧急优先排序** |
-| `tools/tests/section.test.js` | **栏目规则**：公告→栏目归属（含 section_id 为空/指向已删栏目）、总栏目=各栏目紧急汇总、栏目内先紧急后普通、标签上的紧急计数、栏目名规范 |
+| `tools/tests/section.test.js` | **栏目规则**：公告→栏目归属（含 section_id 为空/指向已删栏目）、总栏目=各栏目紧急汇总（以及勾了「也显示普通公告」之后的全部汇总）、栏目内先紧急后普通、标签上的紧急计数、栏目名规范 |
 | `tools/tests/section-move.test.js` | **删栏目之前"把公告搬走"**：只搬源栏目的、搬一半失败要如实报告、老数据（section_id 为空）不被误搬 |
 | `tools/tests/dom.test.js` | DOM 工具：文字/数组/条件渲染，以及**子节点误传对象时不能显示成 `[object Object]`** |
 | `tools/tests/render.test.js` | **渲染冒烟测试**：把所有组件（卡片/图标/状态/筛选栏/**栏目标签行**/对话框）真的渲染一遍，断言**一条警告都没有** |

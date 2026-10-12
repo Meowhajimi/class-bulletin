@@ -40,6 +40,26 @@ export function splitUrgentFirst(messages) {
 }
 
 /**
+ * 总栏目要显示的那一批公告。
+ *
+ * 总栏目默认只汇总**紧急**公告（各栏目一起）；同学如果勾了
+ * 「也显示普通公告」，就把普通公告也一起带出来 —— 排序仍然是紧急在前。
+ *
+ * 注意这里返回的是"该看哪些"，**不负责排序**：排序统一由 sortMessages() 做，
+ * 渲染时再按 isUrgentMessage 分成两段显示（见 app.js 的 renderAggregate）。
+ *
+ * @param {Array<object>} messages 全部公告
+ * @param {{includeNormal?: boolean}} [options]
+ * @returns {Array<object>}
+ */
+export function aggregateMessages(messages, options = {}) {
+  const list = messages || [];
+  if (!options.includeNormal) return list.filter(isUrgentMessage);
+  // 紧急 + 普通 = 全部；调用方会再拆成两段
+  return [...list];
+}
+
+/**
  * 某个标签下应该看到哪些公告。
  *
  * · 总栏目（AGGREGATE_SECTION_ID）→ **所有栏目的紧急公告**

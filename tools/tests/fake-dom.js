@@ -196,6 +196,16 @@ export function installFakeDom() {
     clear: () => store.clear(),
   };
 
+  // 内容偏好（例如总栏目的"也显示普通公告"）存在 localStorage 里，同样给个内存替身。
+  // 单独一份 Map，免得和 sessionStorage 串味 —— 两者的生命周期本来就不一样。
+  const localStore = new Map();
+  globalThis.localStorage = {
+    getItem: (key) => (localStore.has(key) ? localStore.get(key) : null),
+    setItem: (key, value) => localStore.set(key, String(value)),
+    removeItem: (key) => localStore.delete(key),
+    clear: () => localStore.clear(),
+  };
+
   return { body, dispatchDocument: (type) => globalThis.document.dispatch(type) };
 }
 

@@ -20,6 +20,7 @@ import {
 } from '../../web/js/data/contract.js';
 import {
   AGGREGATE_SECTION_ID,
+  aggregateMessages,
   messagesOfSection,
   sectionUrgentCounts,
   splitUrgentFirst,
@@ -184,6 +185,51 @@ test('sectionUrgentCounts：空输入返回全 0 的表', () => {
   const counts = sectionUrgentCounts([], SECTIONS);
   assert.equal(counts.size, SECTIONS.length);
   assert.equal([...counts.values()].every((value) => value === 0), true);
+});
+
+/* ============================ 总栏目的范围 ============================ */
+
+test('aggregateMessages：默认只给紧急公告（总栏目 = 紧急汇总）', () => {
+  const list = [
+    message({ id: 'a' }),
+    message({ id: 'b', is_urgent: true }),
+    message({ id: 'c', section_id: 'sec-class' }),
+  ];
+  assert.deepEqual(aggregateMessages(list, {}).map((item) => item.id), ['b']);
+  assert.deepEqual(aggregateMessages(list).map((item) => item.id), ['b'], '不传参数也是只给紧急');
+});
+
+test('★ aggregateMessages：勾了「也显示普通公告」才把普通的一起带出来', () => {
+  const list = [
+    message({ id: 'a' }),
+    message({ id: 'b', is_urgent: true }),
+    message({ id: 'c', section_id: 'sec-class' }),
+  ];
+  const ids = aggregateMessages(list, { includeNormal: true }).map((item) => item.id);
+  assert.deepEqual(ids, ['a', 'b', 'c'], '全部公告都要，排序交给 sortMessages');
+});
+
+test('aggregateMessages：0/1 形式的紧急标记也认（本地 SQLite）', () => {
+  const list = [message({ id: 'a', is_urgent: 1 }), message({ id: 'b', is_urgent: 0 })];
+  assert.deepEqual(aggregateMessages(list).map((item) => item.id), ['a']);
+  assert.deepEqual(aggregateMessages(list, { includeNormal: true }).map((item) => item.id), ['a', 'b']);
+});
+
+test('★ 开不开开关，紧急条数都一致（开关不该影响紧急汇总）', () => {
+  const list = [
+    message({ id: 'a', is_urgent: true }),
+    message({ id: 'b', is_urgent: true, section_id: 'sec-class' }),
+    message({ id: 'c' }),
+  ];
+  const urgentOnly = aggregateMessages(list).filter((item) => item.is_urgent).length;
+  const withNormal = aggregateMessages(list, { includeNormal: true }).filter((item) => item.is_urgent).length;
+  assert.equal(urgentOnly, 2);
+  assert.equal(withNormal, 2, '勾了开关也不会多出紧急公告');
+});
+
+test('aggregateMessages：空输入不崩', () => {
+  assert.deepEqual(aggregateMessages(null), []);
+  assert.deepEqual(aggregateMessages([], { includeNormal: true }), []);
 });
 
 /* ============================ 栏目名规范 ============================ */

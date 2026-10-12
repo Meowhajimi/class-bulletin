@@ -630,6 +630,17 @@
   font-size: var(--text-xs);
 }
 
+/* —— 总栏目的「也显示普通公告」开关 ——
+ * 放在总栏目列表上方，靠左；和内容之间留一点距离，别和标题挤在一起。
+ */
+.aggregate-toggle {
+  margin-bottom: var(--space-2);
+}
+
+.aggregate-toggle .check-row {
+  align-items: center;
+}
+
 .check-row > input[type='checkbox'] {
   /* 手指点得中 */
   width: 18px;
