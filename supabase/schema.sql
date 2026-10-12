@@ -71,7 +71,7 @@ alter table public.messages add column if not exists section_id uuid references 
 comment on table  public.messages is '班级公告：同学只读，管理员可写';
 comment on column public.messages.expires_at is '过期时间；为空表示永不过期';
 comment on column public.messages.published_at is '发布时间；填未来时间即为定时公告';
-comment on column public.messages.is_urgent is '紧急公告；为真时主界面右下角标红';
+comment on column public.messages.is_urgent is '紧急公告；为真时排在所属栏目最前，并汇总到首页「总栏目」';
 comment on column public.messages.section_id is '所属栏目；老数据迁移后都有值，前端仍有兜底';
 comment on table  public.sections is '栏目：管理员可增删改，同学只读';
 comment on column public.sections.name is '栏目名，1~40 字，不允许重名';

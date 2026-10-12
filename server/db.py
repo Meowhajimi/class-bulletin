@@ -470,7 +470,7 @@ def seed_demo(conn: sqlite3.Connection) -> int:
         {
             "title": "【示例】紧急公告：明天临时调课",
             "body": "这条是「紧急公告」的示例：勾选紧急后，\n"
-            "同学的主界面右下角会出现红色标记，\n"
+            "它会排在本栏目的最前面，\n"
             "也会汇总到顶部的「总栏目」里。",
             "published_at": now.isoformat(timespec="seconds"),
             "expires_at": None,

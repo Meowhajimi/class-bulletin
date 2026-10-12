@@ -9,10 +9,11 @@ import { CONFIG, inspectApiKey, isConfigured } from './config.js';
 import { isUrgentMessage, sectionOf } from './data/contract.js';
 import { exportBackup } from './data/backup.js';
 import { getDataSource } from './data/index.js';
-import { askDialog, askTextDialog } from './ui/dialog.js';
+import { askChoiceDialog, askDialog, askTextDialog } from './ui/dialog.js';
 import { clear, el, qs, toast } from './ui/dom.js';
 import { sortMessages } from './ui/filter.js';
 import { renderMessageCard } from './ui/message-card.js';
+import { countInSection, moveSectionMessages } from './ui/section-move.js';
 import {
   emptyState,
   errorState,
@@ -171,7 +172,7 @@ function buildForm() {
   });
   const expires = el('input', { class: 'input', id: 'edit-expires', type: 'datetime-local' });
 
-  // 紧急公告：勾选后同学主界面右下角会标红
+  // 紧急公告：勾选后会排在栏目最前，并汇总到首页顶部「总栏目」
   const urgent = el('input', { type: 'checkbox', id: 'edit-urgent' });
 
   // 所属栏目：下拉里由 fillSectionOptions() 填当前栏目列表
@@ -246,7 +247,7 @@ function buildForm() {
       'label',
       { class: 'check-row', for: 'edit-urgent' },
       urgent,
-      el('span', { text: '设为紧急公告（主界面右下角标红，并排在最前面）' }),
+      el('span', { text: '设为紧急公告（排在栏目最前，并汇总到顶部「总栏目」）' }),
     ),
     submit,
     cancel,
@@ -691,8 +692,10 @@ function renderSections() {
   // ---- 列表 ----
   const list = el('div', { class: 'section-admin__list' });
   for (const section of state.sections) {
-    const used = state.messages.filter((message) => message.section_id === section.id).length;
+    const used = countInSection(state.messages, section.id);
     const isFallbackOnly = section.id === FALLBACK_SECTION_ID;
+    const isLast = state.sections.length <= 1;
+    const canDelete = !isFallbackOnly && !isLast;
 
     const renameButton = el('button', {
       type: 'button',
@@ -701,17 +704,19 @@ function renderSections() {
       disabled: isFallbackOnly,
       onclick: () => renameSectionFlow(section),
     });
+    // ★ 里面有公告时**不再禁用**：点下去会问"搬到哪个栏目"，搬完再删。
+    //   以前禁用 + 只给 title 提示，手机上连提示都看不到，栏目就永远删不掉。
     const deleteButton = el('button', {
       type: 'button',
       class: 'btn btn--small btn--ghost btn--danger',
-      text: '删除',
-      disabled: isFallbackOnly || used > 0 || state.sections.length <= 1,
+      text: used ? `删除（先搬 ${used} 条）` : '删除',
+      disabled: !canDelete,
       title: isFallbackOnly
         ? '数据库里还没有栏目表，暂时不能管理栏目'
-        : used > 0
-          ? `里面还有 ${used} 条公告，先处理掉它们再删`
-          : state.sections.length <= 1
-            ? '至少要保留一个栏目'
+        : isLast
+          ? '至少要保留一个栏目'
+          : used
+            ? `里面还有 ${used} 条公告：点删除会把它们搬到其它栏目，然后删掉本栏目`
             : '',
       onclick: () => deleteSectionFlow(section),
     });
@@ -749,23 +754,65 @@ async function renameSectionFlow(section) {
   }
 }
 
-/** 删除：先确认（复用站内对话框），失败时把后端给的中文原因原样显示 */
+/**
+ * 删除栏目。
+ *
+ * ★ 以前这里是个死胡同：栏目里还有公告时按钮直接禁用，只留一句 title 提示，
+ *   手机上连提示都看不到，于是"栏目删不掉"。
+ *   现在改成：只要里面还有公告，就问一句"要搬到哪个栏目"，
+ *   搬完再删 —— 删栏目这件事终于能善始善终。
+ */
 async function deleteSectionFlow(section) {
-  const used = state.messages.filter((message) => message.section_id === section.id).length;
+  const used = countInSection(state.messages, section.id);
+  const source = getDataSource();
+
   if (used) {
-    toast(dom.toasts, `「${section.name}」里还有 ${used} 条公告，先把它们改到别的栏目或删除`, 'error');
-    return;
+    const others = state.sections.filter((item) => item.id !== section.id);
+    if (!others.length) {
+      toast(dom.toasts, '至少要保留一个栏目，没法把公告搬走', 'error');
+      return;
+    }
+
+    const target = await askChoiceDialog({
+      title: `「${section.name}」里还有 ${used} 条公告`,
+      text: '栏目不能连着公告一起删掉（免得误删通知）。选一个栏目把这些公告搬过去，然后删除本栏目。',
+      options: others.map((item) => ({ value: item.id, label: item.name })),
+      confirmText: '搬过去并删除栏目',
+      cancelText: '不删了',
+    });
+    if (!target) return;
+
+    const targetName = (others.find((item) => item.id === target) || {}).name || '目标栏目';
+    try {
+      const { moved, failed } = await moveSectionMessages(source, state.messages, section.id, target);
+      if (failed.length) {
+        toast(
+          dom.toasts,
+          `搬动了 ${moved.length} 条，${failed.length} 条失败（${failed[0].error && failed[0].error.message ? failed[0].error.message : '未知原因'}）。栏目先不删，请重试。`,
+          'error',
+        );
+        await loadMessages();
+        return;
+      }
+      toast(dom.toasts, `已把 ${moved.length} 条公告搬到「${targetName}」`, 'success');
+    } catch (error) {
+      toast(dom.toasts, (error && error.message) || '搬动公告失败', 'error');
+      await loadMessages();
+      return;
+    }
+    await loadMessages();
   }
+
   // 注意 askDialog 返回的是 { confirmed, remember }，不是布尔值
   const { confirmed } = await askDialog({
     title: `删除栏目「${section.name}」？`,
-    text: '栏目本身会被删掉。里面的公告不受影响（这里已经确认没有公告了）。',
+    text: '栏目会被删掉。公告已经在别的栏目里了，不受影响。',
     confirmText: '删除栏目',
     cancelText: '不删了',
   });
   if (!confirmed) return;
   try {
-    await getDataSource().deleteSection(section.id);
+    await source.deleteSection(section.id);
     toast(dom.toasts, `已删除栏目「${section.name}」`, 'success');
     // 删掉的可能是当前选中的那个栏目，回到第一个
     if (ui && ui.section) ui.section.value = '';

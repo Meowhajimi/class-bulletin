@@ -639,39 +639,6 @@
   accent-color: var(--color-accent);
 }
 
-/* —— 主界面右下角的紧急标记 —— */
-
-.urgent-flag {
-  position: fixed;
-  right: max(var(--space-4), env(safe-area-inset-right));
-  bottom: max(var(--space-4), env(safe-area-inset-bottom));
-  z-index: 40;
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  padding: var(--space-2) var(--space-4);
-  background: var(--color-danger);
-  color: #ffffff;
-  border-radius: var(--radius-pill);
-  box-shadow: 0 6px 20px rgba(179, 38, 30, 0.32);
-  font-size: var(--text-sm);
-  font-weight: 700;
-  text-decoration: none;
-  /* 静止不动：靠红色和位置吸引注意就够了，抖动反而干扰阅读 */
-}
-
-.urgent-flag svg {
-  width: 18px;
-  height: 18px;
-  flex: 0 0 auto;
-}
-
-.urgent-flag:hover,
-.urgent-flag:focus-visible {
-  filter: brightness(1.08);
-  text-decoration: none;
-}
-
 /* —— 模态对话框（备份询问） —— */
 
 .dialog {

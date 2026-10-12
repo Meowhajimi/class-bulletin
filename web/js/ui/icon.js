@@ -77,29 +77,17 @@ export function loadingIcon() {
   ]);
 }
 
-/** 紧急：实心感叹号圆（给右下角标记用） */
-export function urgentIcon() {
-  const root = svg([
-    { tag: 'circle', attrs: { cx: 12, cy: 12, r: 9, fill: 'currentColor', stroke: 'none' } },
-  ]);
-  const mark = document.createElementNS(SVG_NS, 'path');
-  mark.setAttribute('d', 'M12 7.5v5.2');
-  mark.setAttribute('stroke', '#ffffff');
-  mark.setAttribute('stroke-width', '2');
-  mark.setAttribute('stroke-linecap', 'round');
-  root.append(mark);
-  const dot = document.createElementNS(SVG_NS, 'path');
-  dot.setAttribute('d', 'M12 16.4v.1');
-  dot.setAttribute('stroke', '#ffffff');
-  dot.setAttribute('stroke-width', '2');
-  dot.setAttribute('stroke-linecap', 'round');
-  root.append(dot);
-  return root;
-}
+/** 紧急：实心感叹号圆（已删除 —— 右下角浮动标记移除后没人再用它了） */
 
 /**
  * 按名字取图标；找不到就返回 null（调用方自己决定要不要显示）。
- * @param {'empty'|'error'|'notice'|'loading'|'urgent'} name
+ *
+ * 注：原来还有一个 urgent（右下角"紧急公告"浮动标记用的实心感叹号圆）。
+ * 那个浮动标记已经移除 —— 紧急公告现在由顶部「总栏目」标签上的红色条数表示，
+ * 于是这个图标也没有人用了，整个删掉（不留死代码）。
+ * 想恢复右下角标记的话，git 里能找回这个图标函数。
+ *
+ * @param {'empty'|'error'|'notice'|'loading'} name
  */
 export function icon(name) {
   const table = {
@@ -107,7 +95,6 @@ export function icon(name) {
     error: errorIcon,
     notice: noticeIcon,
     loading: loadingIcon,
-    urgent: urgentIcon,
   };
   const factory = table[name];
   return factory ? factory() : null;

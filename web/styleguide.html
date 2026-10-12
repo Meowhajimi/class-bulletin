@@ -90,7 +90,7 @@
           </div>
           <label class="check-row" for="sg-urgent">
             <input type="checkbox" id="sg-urgent" checked />
-            <span>设为紧急公告（主界面右下角标红，并排在最前面）</span>
+            <span>设为紧急公告（排在栏目最前，并汇总到顶部「总栏目」）</span>
           </label>
         </div>
       </section>
@@ -130,10 +130,6 @@
       </span>
     </footer>
   </div>
-
-  <a class="urgent-flag" href="index.html">
-    <span>紧急公告</span>
-  </a>
 
   <script type="module">
     import { el, qs } from './js/ui/dom.js';
@@ -256,9 +252,8 @@
       );
     }
 
-    // 顶部紧急标记加个图标（和首页一致）
-    const flag = qs('.urgent-flag');
-    if (flag) flag.prepend(icon('urgent'));
+    // 紧急标记（右下角浮动胶囊）已移除：首页现在用顶部「总栏目」标签
+    // 汇总紧急公告，标签上带红色条数。这里不再需要补图标。
   </script>
 </body>
 </html>

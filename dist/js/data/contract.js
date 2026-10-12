@@ -19,7 +19,7 @@
  * @property {string}      body
  * @property {string}      published_at  ISO8601，UTC
  * @property {string|null} expires_at    ISO8601，UTC；null 表示永不过期
- * @property {boolean}     is_urgent     紧急公告（主界面右下角标红）
+ * @property {boolean}     is_urgent     紧急公告（排在栏目最前，并汇总到「总栏目」）
  * @property {string}      section_id    所属栏目；老数据迁移后都有值
  * @property {string}      created_at
  * @property {string}      updated_at

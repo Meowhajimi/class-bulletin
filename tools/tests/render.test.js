@@ -14,6 +14,7 @@
  */
 
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import test from 'node:test';
 
 import { captureWarnings, installFakeDom } from './fake-dom.js';
@@ -26,7 +27,7 @@ const icons = await import('../../web/js/ui/icon.js');
 const { renderFilterBar } = await import('../../web/js/ui/filter-bar.js');
 const { AGGREGATE_SECTION_ID } = await import('../../web/js/ui/filter.js');
 const { renderSectionTabs } = await import('../../web/js/ui/section-tabs.js');
-const { askDialog } = await import('../../web/js/ui/dialog.js');
+const { askDialog, askChoiceDialog } = await import('../../web/js/ui/dialog.js');
 const presence = await import('../../web/js/ui/presence.js');
 
 /** 渲染一批组件，返回期间产生的所有 console.warn */
@@ -153,7 +154,7 @@ test('栏目标签行：点击回调带上正确的 id', () => {
 
 test('所有图标渲染时没有警告，且都带 aria-hidden（读屏软件不用念装饰图）', () => {
   const { warnings, result } = renderAndCollectWarnings(() =>
-    ['empty', 'error', 'notice', 'loading', 'urgent'].map((name) => icons.icon(name)),
+    ['empty', 'error', 'notice', 'loading'].map((name) => icons.icon(name)),
   );
   assert.deepEqual(warnings, [], '图标渲染不该产生警告');
 
@@ -162,6 +163,28 @@ test('所有图标渲染时没有警告，且都带 aria-hidden（读屏软件�
     assert.equal(graphic.getAttribute('aria-hidden'), 'true');
     assert.ok(graphic.childNodes.length > 0, '图标里应当有图形');
   }
+});
+
+test('★ urgent 图标已随右下角浮动标记一起删除', () => {
+  // 首页不再有那个浮动红色胶囊（功能被顶部「总栏目」标签取代），
+  // 所以图标也不该再存在 —— 否则就是没人用的死代码。
+  assert.equal(icons.icon('urgent'), null, 'urgent 图标应当已删除');
+
+  const appSource = readFileSync(new URL('../../web/js/app.js', import.meta.url), 'utf8');
+  assert.equal(/urgent-flag|urgentFlag/.test(appSource), false, 'app.js 里不该再有浮动标记的代码');
+  assert.equal(
+    /icon\(/.test(appSource),
+    false,
+    'app.js 不该再引用图标（浮动标记移除后没有别的图标用途）',
+  );
+});
+
+test('★ 首页 HTML 里不该再有浮动紧急标记（CSS 的 display 会盖掉 hidden）', () => {
+  const html = readFileSync(new URL('../../web/index.html', import.meta.url), 'utf8');
+  assert.equal(/urgent-flag/.test(html), false, 'index.html 里不该再有 .urgent-flag');
+
+  const css = readFileSync(new URL('../../web/css/components.css', import.meta.url), 'utf8');
+  assert.equal(/\.urgent-flag/.test(css), false, 'components.css 里不该再有 .urgent-flag 样式');
 });
 
 test('未知图标名返回 null，而不是崩掉', () => {
@@ -364,6 +387,65 @@ test('对话框用完会从页面上移除', async () => {
   dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
   await promise;
 
+  assert.ok(
+    !globalThis.document.body.childNodes.includes(dialog),
+    '对话框应当被移除，不能一直留在页面上',
+  );
+});
+
+/* ==================== 选择对话框（删栏目时选搬到哪） ==================== */
+
+test('★ 选择对话框：渲染无警告，且确认时返回选中的栏目', async () => {
+  const capture = captureWarnings();
+  let result;
+  try {
+    const promise = askChoiceDialog({
+      title: '「临时栏目」里还有 2 条公告',
+      text: '选一个栏目把它们搬过去，然后删除本栏目。',
+      options: [
+        { value: 'sec-study', label: '学习委员通知' },
+        { value: 'sec-class', label: '班级事务' },
+      ],
+      confirmText: '搬过去并删除栏目',
+    });
+
+    const dialog = globalThis.document.body.childNodes.at(-1);
+    // 选中第二项再确认
+    const select = dialog.find((node) => node.tagName === 'select');
+    select.value = 'sec-class';
+    dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
+    result = await promise;
+  } finally {
+    capture.restore();
+  }
+
+  assert.deepEqual(capture.messages, [], '选择对话框渲染不该产生警告');
+  assert.equal(result, 'sec-class', '应当返回用户选中的栏目 id');
+});
+
+test('选择对话框：取消返回 null', async () => {
+  const promise = askChoiceDialog({
+    title: '标题',
+    options: [{ value: 'a', label: 'A' }],
+    cancelText: '不删了',
+  });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  dialog.findAll((node) => node.tagName === 'button')[1].dispatch('click');
+  assert.equal(await promise, null);
+});
+
+test('选择对话框：没有可选项时直接返回 null（不能弹一个空框）', async () => {
+  assert.equal(await askChoiceDialog({ title: '标题', options: [] }), null);
+});
+
+test('选择对话框：用完也会从页面上移除', async () => {
+  const promise = askChoiceDialog({
+    title: '标题',
+    options: [{ value: 'a', label: 'A' }],
+  });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
+  await promise;
   assert.ok(
     !globalThis.document.body.childNodes.includes(dialog),
     '对话框应当被移除，不能一直留在页面上',

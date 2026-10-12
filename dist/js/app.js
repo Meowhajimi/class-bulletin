@@ -23,7 +23,6 @@ import {
   splitUrgentFirst,
 } from './ui/filter.js';
 import { renderFilterBar } from './ui/filter-bar.js';
-import { icon } from './ui/icon.js';
 import { renderMessageCard } from './ui/message-card.js';
 import { startPresence } from './ui/presence.js';
 import { resetSectionTabs } from './ui/section-tabs.js';
@@ -48,7 +47,6 @@ const dom = {
   downloadBackup: qs('#download-backup'),
   repo: qs('#repo-link'),
   tabs: qs('#section-tabs'),
-  urgentFlag: qs('#urgent-flag'),
   toasts: qs('#toasts'),
 };
 
@@ -122,36 +120,13 @@ function card(message, now, extra = {}) {
 }
 
 /**
- * 右下角的紧急标记。
- * 只在"已发布且未过期"的紧急公告存在时出现 —— 过期的紧急公告要自动撤销标记。
+ * 右下角的紧急标记已经移除（见 index.html 里的说明）。
+ *
+ * 现在"有没有紧急公告"由顶部「总栏目」标签承担：
+ *   标签上有红色条数，点进去就是全部紧急公告的汇总列表。
+ * 这样也顺手修掉了一个 bug：那个浮动标记用 `hidden` 隐藏，
+ * 但它的 CSS 里有 display，会覆盖 hidden —— 没有紧急公告时也露出一个空的红色胶囊。
  */
-function renderUrgentFlag(currentMessages) {
-  const urgent = currentMessages.filter(isUrgentMessage);
-
-  // 先清空再重建：不要用 textContent 赋值，否则会把图标一起抹掉
-  clear(dom.urgentFlag);
-
-  if (!urgent.length) {
-    dom.urgentFlag.hidden = true;
-    dom.urgentFlag.removeAttribute('href');
-    return;
-  }
-
-  dom.urgentFlag.hidden = false;
-  dom.urgentFlag.href = detailHref(urgent[0]);
-  dom.urgentFlag.append(icon('urgent'));
-  dom.urgentFlag.append(
-    el('span', {
-      text: urgent.length === 1 ? '紧急公告' : `紧急公告 · ${urgent.length} 条`,
-    }),
-  );
-  dom.urgentFlag.setAttribute(
-    'aria-label',
-    urgent.length === 1
-      ? `查看紧急公告：${urgent[0].title || '（无标题）'}`
-      : `共有 ${urgent.length} 条紧急公告，点击查看最近一条`,
-  );
-}
 
 /** 按当前时间、当前标签与筛选条件重新渲染 */
 function render() {
@@ -160,12 +135,6 @@ function render() {
 
   if (!cache.all) return;
 
-  // 紧急标记（右下角）反映的是"全部栏目的真实当前公告"，不受标签和筛选影响
-  const { current } = splitMessages(cache.all, {
-    now,
-    thresholdDays: CONFIG.expiry.soonThresholdDays,
-  });
-  renderUrgentFlag(current);
   renderTabs();
 
   const active = hasActiveFilter(filters);

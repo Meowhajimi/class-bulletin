@@ -77,8 +77,13 @@
 
   <div class="toast-stack" id="toasts" aria-live="polite"></div>
 
-  <!-- 有紧急公告时显示在右下角（app.js 负责填充） -->
-  <a class="urgent-flag" id="urgent-flag" hidden></a>
+  <!--
+    右下角原来有一个「紧急公告」红色浮动标记，已经移除：
+      · 顶部「总栏目」标签本身就把所有栏目的紧急公告汇总在一起，
+        标签上还有红色条数，功能重复；
+      · 它曾经用 `hidden` 属性隐藏，但 CSS 里的 display 会覆盖 hidden，
+        没有紧急公告时也会露出一个空的红色胶囊，看起来像坏掉了。
+  -->
 
   <script type="module" src="js/app.js"></script>
 </body>

@@ -93,6 +93,86 @@ export function askDialog(options) {
 }
 
 /**
+ * 弹出一个"从几个选项里挑一个"的对话框（删栏目时用来选搬去哪个栏目）。
+ *
+ * @param {{
+ *   title: string,
+ *   text?: string,
+ *   options: Array<{value: string, label: string}>,
+ *   confirmText?: string,
+ *   cancelText?: string,
+ * }} options
+ * @returns {Promise<string|null>} 确认时返回选中的 value；取消返回 null
+ */
+export function askChoiceDialog(options) {
+  const {
+    title,
+    text = '',
+    options: choices = [],
+    confirmText = '确定',
+    cancelText = '取消',
+  } = options;
+
+  return new Promise((resolve) => {
+    if (!choices.length) {
+      resolve(null);
+      return;
+    }
+
+    const select = el('select', { class: 'input', id: 'dialog-choice' });
+    for (const choice of choices) {
+      select.append(el('option', { value: choice.value, text: choice.label }));
+    }
+
+    const confirmButton = el('button', {
+      type: 'button',
+      class: 'btn btn--primary btn--block',
+      text: confirmText,
+    });
+    const cancelButton = el('button', {
+      type: 'button',
+      class: 'btn btn--ghost btn--block',
+      text: cancelText,
+    });
+
+    const dialog = el(
+      'dialog',
+      { class: 'dialog' },
+      el(
+        'div',
+        { class: 'dialog__body' },
+        el('p', { class: 'dialog__title', text: title }),
+        text ? el('p', { class: 'dialog__text', text }) : null,
+        el(
+          'div',
+          { class: 'field' },
+          el('label', { class: 'field__label', for: 'dialog-choice', text: '搬到' }),
+          select,
+        ),
+        el('div', { class: 'dialog__actions' }, confirmButton, cancelButton),
+      ),
+    );
+
+    const finish = (value) => {
+      if (dialog.open) dialog.close();
+      dialog.remove();
+      resolve(value);
+    };
+
+    confirmButton.addEventListener('click', () => finish(select.value));
+    cancelButton.addEventListener('click', () => finish(null));
+    dialog.addEventListener('cancel', (event) => {
+      event.preventDefault();
+      finish(null);
+    });
+
+    document.body.append(dialog);
+    dialog.showModal();
+    confirmButton.focus();
+  });
+}
+
+/**
  * 弹出一个"输入一行文字"的对话框（例如给栏目改名）。
  *
  * 为什么不直接用 window.prompt：
