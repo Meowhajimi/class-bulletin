@@ -20,6 +20,11 @@ class FakeNode {
     this.open = false;
     this.focused = false;
     this.checked = false;
+    // 表单控件的"当前值"。真实 DOM 里 value 是属性而不是特性，
+    // 但我们的 el() 是用 setAttribute('value', ...) 设置的 ——
+    // 所以要把它镜像过来，否则测试里读 input.value 会是 undefined
+    //（真实事故：对话框代码读 input.value.trim()，测试却因为读不到值而崩）。
+    this.value = '';
 
     // 真实浏览器里每个元素都有 classList；组件（如栏目标签行）
     // 会用 classList.toggle 切换选中态，所以这里补一个最小实现。
@@ -85,6 +90,8 @@ class FakeNode {
 
   setAttribute(key, value) {
     this.attributes[key] = value;
+    // 镜像表单控件的 value（真实浏览器里 input.value 与 value 特性是联动的）
+    if (key === 'value') this.value = value;
   }
 
   getAttribute(key) {

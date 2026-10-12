@@ -27,7 +27,7 @@ const icons = await import('../../web/js/ui/icon.js');
 const { renderFilterBar } = await import('../../web/js/ui/filter-bar.js');
 const { AGGREGATE_SECTION_ID } = await import('../../web/js/ui/filter.js');
 const { renderSectionTabs } = await import('../../web/js/ui/section-tabs.js');
-const { askDialog, askChoiceDialog } = await import('../../web/js/ui/dialog.js');
+const { askDialog, askChoiceDialog, askTextDialog } = await import('../../web/js/ui/dialog.js');
 const presence = await import('../../web/js/ui/presence.js');
 
 /** 渲染一批组件，返回期间产生的所有 console.warn */
@@ -444,6 +444,77 @@ test('选择对话框：用完也会从页面上移除', async () => {
     options: [{ value: 'a', label: 'A' }],
   });
   const dialog = globalThis.document.body.childNodes.at(-1);
+  dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
+  await promise;
+  assert.ok(
+    !globalThis.document.body.childNodes.includes(dialog),
+    '对话框应当被移除，不能一直留在页面上',
+  );
+});
+
+/* ============ 输入对话框（重命名栏目；真实事故：点按钮没反应） ============ */
+
+test('★ 输入对话框：点「保存名称」必须能保存（真实事故）', async () => {
+  // 事故经过：确认按钮是 type="button"，不会触发表单的 submit，
+  // 而当时只接了 submit —— 于是点按钮**毫无反应**，但按回车却能用，
+  // 用户完全不知道还能按回车，只会觉得"重命名坏了"。
+  const capture = captureWarnings();
+  let result;
+  try {
+    const promise = askTextDialog({
+      title: '重命名栏目「学习委员通知」',
+      label: '新名称',
+      value: '学习委员通知',
+      confirmText: '保存名称',
+    });
+
+    const dialog = globalThis.document.body.childNodes.at(-1);
+    const input = dialog.find((node) => node.tagName === 'input');
+    input.value = '  课堂通知  '; // 故意带空格，验证会被 trim
+    dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
+
+    result = await promise;
+  } finally {
+    capture.restore();
+  }
+
+  assert.deepEqual(capture.messages, [], '输入对话框渲染不该产生警告');
+  assert.equal(result, '课堂通知', '点确认按钮应当返回去掉首尾空格后的新名称');
+});
+
+test('★ 输入对话框：在输入框里按回车也能保存（两条路都要通）', async () => {
+  const promise = askTextDialog({ title: '标题', value: '旧名字' });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  const input = dialog.find((node) => node.tagName === 'input');
+  const form = dialog.find((node) => node.tagName === 'form');
+
+  input.value = '新名字';
+  form.dispatch('submit', { preventDefault: () => {} });
+
+  assert.equal(await promise, '新名字');
+});
+
+test('输入对话框：点取消返回 null', async () => {
+  const promise = askTextDialog({ title: '标题', value: '旧名字', cancelText: '取消' });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  // 顺序是 [确认, 取消]
+  dialog.findAll((node) => node.tagName === 'button')[1].dispatch('click');
+  assert.equal(await promise, null);
+});
+
+test('输入对话框：按 Esc 也算取消', async () => {
+  const promise = askTextDialog({ title: '标题' });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  dialog.dispatch('cancel', { preventDefault: () => {} });
+  assert.equal(await promise, null);
+});
+
+test('输入对话框：用完从页面移除，且长度上限来自参数', async () => {
+  const promise = askTextDialog({ title: '标题', maxLength: 40 });
+  const dialog = globalThis.document.body.childNodes.at(-1);
+  const input = dialog.find((node) => node.tagName === 'input');
+  assert.equal(input.getAttribute('maxlength'), '40');
+
   dialog.findAll((node) => node.tagName === 'button')[0].dispatch('click');
   await promise;
   assert.ok(

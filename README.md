@@ -22,7 +22,7 @@
 | **`发布到Cloudflare.bat`** | ★ 更新**主站**（Cloudflare Pages）—— 会跑一次打包并打开控制台 |
 | **`备份公告到Word.bat`** | 把云端全部公告导出成 Word，存到 `backups\` |
 | **`云端自检.bat`** | 检查线上是否正常：能读公告 / 注册已关 / 同学不能发布 |
-| **`跑测试.bat`** | 改完代码跑一遍全部测试（12 个套件，**619 项**） |
+| **`跑测试.bat`** | 改完代码跑一遍全部测试（12 个套件，**624 项**） |
 | **`公开前体检.bat`** | 想把源码公开给同学之前跑一遍：查机密 key / 本机专用文件 / 个人信息 / 乱码 |
 | **`推送到GitHub.bat`** | 改完网页后一键更新主站（打包 → 提交 → 推送，Cloudflare 自动部署） |
 
@@ -495,7 +495,7 @@ import { createMyApiSource } from './myapi.js';
 ## 七、测试与自检
 
 ```bat
-:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（201 项）
+:: 前端逻辑 + 数据层 + DOM 渲染 + Word 生成（206 项）
 "C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"
 
 :: 后端接口端到端 + 老库迁移 + 栏目增删改（99 项）
@@ -519,7 +519,7 @@ python tools/tests/theme_test.py
 "C:\Program Files\nodejs\node.exe" tools\live-check.js --check-write
 ```
 
-> 合计 **619 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
+> 合计 **624 项**。懒得一条条敲就**双击根目录的 `跑测试.bat`**，它会把上面这些套件依次跑完。
 
 node 不在 PATH 时用完整路径：
 `"C:\Program Files\nodejs\node.exe" --test "tools/tests/*.test.js"`

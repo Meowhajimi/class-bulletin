@@ -240,16 +240,21 @@ export function askTextDialog(options) {
       resolve(result);
     };
 
-    // 用 <form method="dialog"> 包一层，这样回车提交天然可用
+    // ★ 两条路都要接上，缺一条就会"点了没反应"：
+    //   ① 点「保存名称」按钮 —— 它是 type="button"，**不会**触发表单的 submit
+    //      （真实事故：只接了 submit，于是点按钮完全没反应，
+    //        而按回车却有反应 —— 用户根本不知道还能按回车）
+    //   ② 在输入框里按回车 —— 走表单的 submit
+    confirmButton.addEventListener('click', () => finish(input.value.trim()));
     form.addEventListener('submit', (event) => {
       event.preventDefault();
       finish(input.value.trim());
     });
-    cancelButton.addEventListener('click', (event) => {
-      event.preventDefault();
-      finish(null);
-    });
+    // 取消按钮是 type="button"，本来就不会提交任何东西，不需要 preventDefault
+    // （以前这里多写了一句 event.preventDefault()，在事件对象不完整的环境里会直接抛错）
+    cancelButton.addEventListener('click', () => finish(null));
     dialog.addEventListener('cancel', (event) => {
+      // 这个才是必须的：不拦住的话浏览器会自己关闭 <dialog>，我们就收不到结果了
       event.preventDefault();
       finish(null);
     });
